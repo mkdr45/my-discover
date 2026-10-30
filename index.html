@@ -1,0 +1,1078 @@
+<!DOCTYPE html>
+<html lang="ja" data-theme="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <title>My Discover</title>
+
+  <!-- PWA用の設定読み込み -->
+  <link rel="manifest" href="./manifest.json">
+  <meta name="theme-color" content="#2d2e30">
+  <link rel="apple-touch-icon" href="./apple-touch-icon.png">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="ニュース">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <script>
+    // Service Workerの登録
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('./sw.js')
+        .then(() => console.log('PWA Ready!'))
+        .catch((err) => console.log('PWA error:', err));
+    }
+  </script>
+
+  <style>
+    /* ===== 色の定義（ダーク / ライト） ===== */
+    :root {
+      --bg: #202124; --card: #2d2e30; --card-2: #3a3b3e; --border: #3c4043;
+      --text: #e8eaed; --muted: #9aa0a6; --accent: #8ab4f8; --on-accent: #202124;
+      --amber: #fdd663; --amber-bg: rgba(253, 214, 99, .12);
+      --danger: #f28b82; --ok: #81c995;
+      --toast-bg: #e8eaed; --toast-text: #202124; --toast-action: #1a73e8;
+      --skel: #3a3b3e; --skel-hi: #4a4c50;
+      --shadow: 0 8px 28px rgba(0, 0, 0, .45);
+      color-scheme: dark;
+    }
+    :root[data-theme="light"] {
+      --bg: #f8f9fa; --card: #ffffff; --card-2: #f1f3f4; --border: #e0e0e0;
+      --text: #202124; --muted: #5f6368; --accent: #1a73e8; --on-accent: #ffffff;
+      --amber: #b06000; --amber-bg: rgba(251, 188, 4, .16);
+      --danger: #d93025; --ok: #188038;
+      --toast-bg: #303134; --toast-text: #e8eaed; --toast-action: #8ab4f8;
+      --skel: #e8eaed; --skel-hi: #f6f7f8;
+      --shadow: 0 8px 28px rgba(60, 64, 67, .22);
+      color-scheme: light;
+    }
+
+    * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+    html, body { margin: 0; background: var(--bg); color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Noto Sans JP", "Segoe UI", sans-serif; }
+    body { min-height: 100vh; overscroll-behavior-y: none; }
+    body.lock { overflow: hidden; }
+    button { font: inherit; color: inherit; background: none; border: 0; padding: 0; cursor: pointer; }
+    [hidden] { display: none !important; }
+
+    .icon { width: 20px; height: 20px; flex: none; }
+    .icon.sm { width: 16px; height: 16px; }
+    .icon.lg { width: 44px; height: 44px; }
+    .icon.fill { fill: currentColor; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .spin { animation: spin .8s linear infinite; }
+
+    /* ===== ヘッダー ===== */
+    .app-header {
+      position: sticky; top: 0; z-index: 20;
+      display: flex; align-items: center; justify-content: space-between; gap: 8px;
+      padding: calc(8px + env(safe-area-inset-top)) 12px 8px 16px;
+      background: var(--card);
+      background: color-mix(in srgb, var(--card) 90%, transparent);
+      backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
+      border-bottom: 1px solid var(--border);
+    }
+    .brand { display: flex; align-items: center; gap: 10px; min-width: 0; }
+    .brand-icon { width: 36px; height: 36px; border-radius: 50%; display: grid; place-items: center;
+      color: var(--accent); background: color-mix(in srgb, var(--accent) 18%, transparent); }
+    .brand h1 { font-size: 17px; margin: 0; line-height: 1.2; }
+    .brand p { font-size: 11px; color: var(--muted); margin: 2px 0 0; }
+    .actions { display: flex; align-items: center; }
+    .icon-btn { width: 40px; height: 40px; border-radius: 50%; display: grid; place-items: center; position: relative; }
+    .icon-btn:active { background: var(--card-2); }
+    @media (hover: hover) { .icon-btn:hover { background: var(--card-2); } }
+    .badge { position: absolute; top: 3px; right: 2px; min-width: 17px; height: 17px; padding: 0 4px;
+      border-radius: 9px; background: var(--accent); color: var(--on-accent);
+      font-size: 10px; font-weight: 700; display: grid; place-items: center; }
+
+    /* ===== メイン & プルトゥリフレッシュ ===== */
+    main { position: relative; max-width: 640px; margin: 0 auto;
+      padding: 14px 16px calc(96px + env(safe-area-inset-bottom));
+      transform: translateY(var(--pull, 0px)); }
+    main.release { transition: transform .3s ease; }
+    .ptr { position: absolute; top: -48px; left: 50%; transform: translateX(-50%);
+      display: flex; align-items: center; gap: 8px; height: 36px; padding: 0 14px;
+      border-radius: 18px; background: var(--card); box-shadow: var(--shadow);
+      font-size: 12px; color: var(--muted); white-space: nowrap; opacity: var(--ptr-o, 0); }
+    .ptr .icon { transform: rotate(var(--ptr-rot, 0deg)); transition: transform .2s; }
+    .ptr.loading .icon { animation: spin .8s linear infinite; }
+
+    /* ===== 検索 & オートコンプリート ===== */
+    .field { position: relative; display: flex; align-items: center; gap: 8px; height: 46px; padding: 0 12px 0 14px;
+      background: var(--card); border: 1px solid var(--border); border-radius: 23px; color: var(--muted); }
+    .field:focus-within { border-color: var(--accent); }
+    .field input { flex: 1; min-width: 0; border: 0; outline: none; background: transparent;
+      color: var(--text); font-size: 16px; /* 16px未満だとiPhoneで勝手にズームされる */ }
+    .field input::placeholder { color: var(--muted); }
+    .ac-list { position: absolute; left: 0; right: 0; top: calc(100% + 6px); z-index: 15;
+      list-style: none; margin: 0; padding: 6px; background: var(--card); color: var(--text);
+      border: 1px solid var(--border); border-radius: 16px; box-shadow: var(--shadow);
+      max-height: 300px; overflow-y: auto; }
+    .ac-item { display: flex; align-items: center; gap: 10px; padding: 11px 12px; border-radius: 10px; font-size: 14px; cursor: pointer; }
+    .ac-item.active { background: var(--card-2); }
+    .ac-item mark { background: none; color: var(--accent); font-weight: 700; }
+    .ac-item .tag { margin-left: auto; font-size: 11px; color: var(--muted); white-space: nowrap; }
+    .ac-item .icon { color: var(--muted); }
+
+    /* ===== チップ ===== */
+    .chips-row { display: flex; align-items: center; gap: 8px; margin: 12px 0; }
+    .chips { display: flex; gap: 6px; overflow-x: auto; scrollbar-width: none; flex: 1; min-width: 0; }
+    .chips::-webkit-scrollbar { display: none; }
+    .chip { white-space: nowrap; font-size: 13px; padding: 7px 14px; border-radius: 18px;
+      background: var(--card); border: 1px solid var(--border); color: var(--muted); }
+    .chip.active { background: var(--accent); border-color: var(--accent); color: var(--on-accent); font-weight: 600; }
+    .stat { font-size: 11px; color: var(--muted); white-space: nowrap; }
+
+    .hint { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; padding: 8px 6px 8px 12px;
+      font-size: 12px; color: var(--muted); border: 1px dashed var(--border); border-radius: 12px; }
+    .hint span { flex: 1; }
+
+    /* ===== カード & スワイプ ===== */
+    .feed { display: flex; flex-direction: column; gap: 14px; }
+    .swipe { position: relative; border-radius: 18px; overflow: hidden; }
+    .swipe.collapse { transition: height .25s ease, opacity .25s ease, margin .25s ease; }
+    .swipe-bg { position: absolute; inset: 0; display: flex; align-items: center; justify-content: space-between;
+      padding: 0 22px; font-size: 13px; font-weight: 700; border-radius: 18px; visibility: hidden; }
+    .swipe-bg > div { display: flex; align-items: center; gap: 6px; opacity: .45; transition: opacity .15s, transform .15s; }
+    .swipe[data-dir="right"] .swipe-bg { visibility: visible; color: var(--ok); background: color-mix(in srgb, var(--ok) 22%, var(--bg)); }
+    .swipe[data-dir="left"] .swipe-bg { visibility: visible; color: var(--danger); background: color-mix(in srgb, var(--danger) 22%, var(--bg)); }
+    .swipe[data-dir="right"] .bg-dismiss, .swipe[data-dir="left"] .bg-save { visibility: hidden; }
+    .swipe.armed .swipe-bg > div { opacity: 1; transform: scale(1.12); }
+
+    .card { position: relative; background: var(--card); border: 1px solid var(--border); border-radius: 18px; overflow: hidden;
+      touch-action: pan-y; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none;
+      transition: transform .25s ease; }
+    .card.dragging { transition: none; }
+    .rec { display: flex; align-items: center; gap: 6px; padding: 7px 14px; font-size: 11px; font-weight: 600;
+      color: var(--amber); background: var(--amber-bg); }
+    .thumb { position: relative; aspect-ratio: 16 / 9; background: linear-gradient(135deg, var(--card-2), var(--border)); }
+    .thumb img { width: 100%; height: 100%; object-fit: cover; display: block; pointer-events: none; -webkit-user-drag: none; }
+    .thumb .cat { position: absolute; top: 10px; left: 10px; font-size: 11px; color: #fff;
+      background: rgba(0, 0, 0, .55); padding: 3px 10px; border-radius: 12px; }
+    .card-body { padding: 12px 14px 4px; }
+    .meta { display: flex; justify-content: space-between; gap: 8px; font-size: 12px; color: var(--muted); margin-bottom: 6px; }
+    .meta .src { display: flex; align-items: center; gap: 4px; min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+    .card h2 { font-size: 16px; line-height: 1.45; margin: 0 0 6px; cursor: pointer; }
+    .card .sum { font-size: 13px; line-height: 1.6; color: var(--muted); margin: 0 0 6px;
+      display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+    .bar { display: flex; align-items: center; margin: 0 -8px; border-top: 1px solid var(--border); }
+    .bar .icon-btn { color: var(--muted); }
+    .bar .liked { color: var(--danger); }
+    .bar .saved { color: var(--accent); }
+    .spacer { flex: 1; }
+
+    /* ===== スケルトン ===== */
+    .skel { background: var(--card); border: 1px solid var(--border); border-radius: 18px; overflow: hidden; padding-bottom: 12px; }
+    .sk { border-radius: 6px; background: linear-gradient(90deg, var(--skel) 25%, var(--skel-hi) 37%, var(--skel) 63%);
+      background-size: 400% 100%; animation: shimmer 1.3s ease infinite; }
+    .sk.img { aspect-ratio: 16 / 9; border-radius: 0; }
+    .sk.line { height: 12px; margin: 12px 14px 0; }
+    @keyframes shimmer { from { background-position: 100% 50%; } to { background-position: 0 50%; } }
+
+    .empty { text-align: center; padding: 56px 16px; color: var(--muted); }
+    .empty h3 { color: var(--text); font-size: 15px; margin: 12px 0 6px; }
+    .empty p { font-size: 12px; margin: 0 0 16px; }
+
+    /* ===== ボタン共通 ===== */
+    .btn { height: 40px; padding: 0 18px; border-radius: 20px; background: var(--accent); color: var(--on-accent); font-size: 13px; font-weight: 600; }
+    .btn.ghost { background: var(--card-2); color: var(--text); }
+
+    /* ===== ボトムシート ===== */
+    .backdrop { position: fixed; inset: 0; z-index: 40; background: rgba(0, 0, 0, .5); opacity: 0; pointer-events: none; transition: opacity .25s; }
+    .backdrop.show { opacity: 1; pointer-events: auto; }
+    .sheet { position: fixed; left: 0; right: 0; bottom: 0; z-index: 50; max-width: 560px; margin: 0 auto; max-height: 86vh;
+      display: flex; flex-direction: column; background: var(--card); border-radius: 20px 20px 0 0; box-shadow: var(--shadow);
+      padding-bottom: env(safe-area-inset-bottom);
+      transform: translateY(105%); visibility: hidden;
+      transition: transform .32s cubic-bezier(.2, .8, .2, 1), visibility 0s .32s; }
+    .sheet.open { transform: translateY(0); visibility: visible; transition: transform .32s cubic-bezier(.2, .8, .2, 1), visibility 0s; }
+    .sheet.dragging { transition: none; }
+    .sheet-head { padding: 8px 12px 6px 18px; touch-action: none; cursor: grab; }
+    .grabber { width: 40px; height: 5px; border-radius: 3px; background: var(--border); margin: 0 auto 8px; }
+    .sheet-title { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 16px; font-weight: 700; }
+    .sheet-title span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .sheet-body { overflow-y: auto; overscroll-behavior: contain; padding: 4px 18px 20px; }
+    .section { margin-top: 18px; }
+    .section:first-child { margin-top: 6px; }
+    .section h3 { display: flex; justify-content: space-between; font-size: 13px; color: var(--muted); font-weight: 600; margin: 0 0 8px; }
+    .panel { background: var(--card-2); border-radius: 14px; padding: 14px; }
+    .slider-head { display: flex; justify-content: space-between; align-items: center; font-size: 14px; font-weight: 600; margin-bottom: 8px; }
+    .slider-val { font-size: 12px; color: var(--amber); background: var(--amber-bg); padding: 2px 8px; border-radius: 6px; }
+    input[type="range"] { width: 100%; accent-color: var(--amber); }
+    .slider-ends { display: flex; justify-content: space-between; font-size: 11px; color: var(--muted); }
+    .tags { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+    .tag-pill { display: inline-flex; align-items: center; gap: 2px; padding: 4px 4px 4px 12px; border-radius: 16px; font-size: 13px;
+      color: var(--accent); background: color-mix(in srgb, var(--accent) 16%, transparent); }
+    .tag-pill button { width: 24px; height: 24px; border-radius: 50%; display: grid; place-items: center; }
+    .preset { padding: 6px 12px; border-radius: 14px; border: 1px solid var(--border); font-size: 12px; }
+    .preset:disabled { opacity: .4; cursor: default; }
+    .action-list button { display: flex; align-items: center; gap: 14px; width: 100%; padding: 14px 6px; font-size: 15px; border-radius: 12px; text-align: left; }
+    .action-list button:active { background: var(--card-2); }
+    .action-list .danger { color: var(--danger); }
+    .saved-item { display: flex; align-items: center; gap: 10px; padding: 8px 0; border-bottom: 1px solid var(--border); font-size: 13px; }
+    .saved-item span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .muted { color: var(--muted); font-size: 12px; }
+
+    /* ===== トースト ===== */
+    .toast { position: fixed; left: 16px; right: 16px; bottom: calc(16px + env(safe-area-inset-bottom)); z-index: 60;
+      max-width: 480px; margin: 0 auto; display: flex; align-items: center; gap: 12px; padding: 12px 10px 12px 16px;
+      border-radius: 14px; background: var(--toast-bg); color: var(--toast-text); box-shadow: var(--shadow); font-size: 13px;
+      transform: translateY(150%); opacity: 0; pointer-events: none; transition: transform .3s cubic-bezier(.2, .8, .2, 1), opacity .3s; }
+    .toast.show { transform: none; opacity: 1; pointer-events: auto; }
+    .toast span { flex: 1; }
+    .toast button { color: var(--toast-action); font-weight: 700; padding: 6px 8px; white-space: nowrap; }
+
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- ヘッダー -->
+  <header class="app-header">
+    <div class="brand">
+      <div class="brand-icon"><i data-icon="compass"></i></div>
+      <div>
+        <h1>My Discover</h1>
+        <p>サンプルデータで表示中</p>
+      </div>
+    </div>
+    <div class="actions">
+      <button id="refresh-btn" class="icon-btn" aria-label="フィードを更新"><i data-icon="refresh"></i></button>
+      <button id="saved-btn" class="icon-btn" aria-label="保存した記事"><i data-icon="bookmark"></i><span id="saved-badge" class="badge" hidden>0</span></button>
+      <button id="theme-btn" class="icon-btn" aria-label="テーマ切り替え"><i data-icon="sun" id="theme-icon"></i></button>
+      <button id="settings-btn" class="icon-btn" aria-label="チューニング"><i data-icon="sliders"></i></button>
+    </div>
+  </header>
+
+  <main id="main">
+    <!-- プルトゥリフレッシュの表示 -->
+    <div id="ptr" class="ptr"><i data-icon="arrowDown"></i><span id="ptr-text">引っぱって更新</span></div>
+
+    <!-- 検索（オートコンプリート付き） -->
+    <div class="field" id="quick-field">
+      <i data-icon="search"></i>
+      <input type="text" id="quick-input" placeholder="興味のある話題をフォロー（例: キャンプ）" autocomplete="off" enterkeyhint="done" aria-autocomplete="list" aria-controls="quick-ac">
+      <ul class="ac-list" id="quick-ac" role="listbox" hidden></ul>
+    </div>
+
+    <!-- 絞り込みチップ -->
+    <div class="chips-row">
+      <div class="chips" id="chips"></div>
+      <span class="stat" id="feed-stat"></span>
+    </div>
+
+    <!-- 操作ヒント（初回のみ） -->
+    <div class="hint" id="hint" hidden>
+      <i data-icon="sparkles" class="sm"></i>
+      <span>カードを ← で「興味なし」、→ で「保存」。長押しでメニュー</span>
+      <button class="icon-btn" id="hint-close" aria-label="ヒントを閉じる"><i data-icon="x" class="sm"></i></button>
+    </div>
+
+    <div id="feed" class="feed"></div>
+
+    <div id="empty" class="empty" hidden>
+      <i data-icon="inbox" class="lg"></i>
+      <h3>表示できる記事がありません</h3>
+      <p>話題をフォローするか、チューニングで「遊び度」を上げてみてください。</p>
+      <button class="btn" id="empty-settings">チューニングを開く</button>
+    </div>
+  </main>
+
+  <!-- ボトムシート共通の背景 -->
+  <div id="backdrop" class="backdrop"></div>
+
+  <!-- ボトムシート：チューニング -->
+  <section class="sheet" id="sheet-settings" role="dialog" aria-modal="true" aria-label="チューニング">
+    <div class="sheet-head">
+      <div class="grabber"></div>
+      <div class="sheet-title"><span>チューニング</span><button class="icon-btn" data-close aria-label="閉じる"><i data-icon="x"></i></button></div>
+    </div>
+    <div class="sheet-body">
+      <div class="section">
+        <div class="panel">
+          <div class="slider-head"><span>遊び度（意外性）</span><span class="slider-val" id="play-val">50%</span></div>
+          <input type="range" id="play-slider" min="0" max="100" step="10" value="50">
+          <div class="slider-ends"><span>🎯 本命ニュース</span><span>🎲 意外な発見</span></div>
+        </div>
+      </div>
+      <div class="section">
+        <h3><span>フォロー中の話題</span><span id="topic-count"></span></h3>
+        <div class="field">
+          <i data-icon="plus"></i>
+          <input type="text" id="topic-input" placeholder="話題を追加…" autocomplete="off" enterkeyhint="done">
+          <ul class="ac-list" id="topic-ac" role="listbox" hidden></ul>
+        </div>
+        <div class="tags" id="topic-tags"></div>
+      </div>
+      <div class="section">
+        <h3><span>おすすめから追加</span></h3>
+        <div class="tags" id="presets"></div>
+      </div>
+      <div class="section">
+        <button class="btn ghost" id="reset-btn">初期設定に戻す</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- ボトムシート：保存した記事 -->
+  <section class="sheet" id="sheet-saved" role="dialog" aria-modal="true" aria-label="保存した記事">
+    <div class="sheet-head">
+      <div class="grabber"></div>
+      <div class="sheet-title"><span>あとで読む</span><button class="icon-btn" data-close aria-label="閉じる"><i data-icon="x"></i></button></div>
+    </div>
+    <div class="sheet-body" id="saved-list"></div>
+  </section>
+
+  <!-- ボトムシート：記事メニュー -->
+  <section class="sheet" id="sheet-actions" role="dialog" aria-modal="true" aria-label="記事メニュー">
+    <div class="sheet-head">
+      <div class="grabber"></div>
+      <div class="sheet-title"><span id="actions-title"></span><button class="icon-btn" data-close aria-label="閉じる"><i data-icon="x"></i></button></div>
+    </div>
+    <div class="sheet-body action-list" id="actions-list"></div>
+  </section>
+
+  <!-- トースト -->
+  <div id="toast" class="toast" role="status" aria-live="polite">
+    <span id="toast-msg"></span>
+    <button id="toast-action" hidden></button>
+  </div>
+
+  <script>
+    /* =========================================================
+       アイコン（外部ライブラリを使わず、SVGを直接埋め込み）
+       ========================================================= */
+    const ICONS = {
+      compass: '<circle cx="12" cy="12" r="10"/><polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76"/>',
+      refresh: '<path d="M21 12a9 9 0 1 1-3-6.7L21 8"/><path d="M21 3v5h-5"/>',
+      bookmark: '<path d="M19 21l-7-4-7 4V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/>',
+      sun: '<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/>',
+      moon: '<path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9z"/>',
+      sliders: '<path d="M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3M1 14h6M9 8h6M17 16h6"/>',
+      search: '<circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/>',
+      plus: '<path d="M12 5v14M5 12h14"/>',
+      x: '<path d="M18 6 6 18M6 6l12 12"/>',
+      heart: '<path d="M19 14c1.5-1.5 3-3.2 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.8 0-3 .5-4.5 2-1.5-1.5-2.7-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4 3 5.5l7 7z"/>',
+      share: '<path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/><path d="M16 6l-4-4-4 4M12 2v13"/>',
+      more: '<circle cx="5" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/>',
+      ban: '<circle cx="12" cy="12" r="10"/><path d="m4.9 4.9 14.2 14.2"/>',
+      sparkles: '<path d="M12 3l1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9z"/>',
+      arrowDown: '<path d="M12 5v14M19 12l-7 7-7-7"/>',
+      globe: '<circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2a15 15 0 0 1 0 20M12 2a15 15 0 0 0 0 20"/>',
+      trash: '<path d="M3 6h18M19 6l-1 14H6L5 6M9 6V4h6v2"/>',
+      check: '<path d="M20 6 9 17l-5-5"/>',
+      tag: '<path d="M20.6 13.4 13.4 20.6a2 2 0 0 1-2.8 0L3 13V3h10l7.6 7.6a2 2 0 0 1 0 2.8z"/><circle cx="7.5" cy="7.5" r="1"/>',
+      inbox: '<path d="M22 12h-6l-2 3h-4l-2-3H2"/><path d="M5.5 5h13L22 12v6a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2v-6z"/>'
+    };
+    function icon(name, cls = '') {
+      return `<svg class="icon ${cls}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICONS[name] || ''}</svg>`;
+    }
+    function hydrateIcons(root = document) {
+      root.querySelectorAll('i[data-icon]').forEach(el => {
+        const wrap = document.createElement('span');
+        wrap.innerHTML = icon(el.dataset.icon, el.className);
+        const svg = wrap.firstElementChild;
+        if (el.id) svg.id = el.id;
+        el.replaceWith(svg);
+      });
+    }
+
+    /* =========================================================
+       サンプルデータ（Gemini版の記事。すべて架空です）
+       ========================================================= */
+    const ARTICLES = [
+      { id: 'news-1', category: 'ホロライブ', source: 'VTuber News Online', timeAgo: '2時間前',
+        title: '【ホロライブ】白銀ノエルの『ホロ鯖ARK』特大企画に同時接続数急上昇！ファン歓喜のハロウィンイベント開幕',
+        summary: 'ホロライブ所属の白銀ノエルが配信したホロ鯖ARKにて、豪華メンバーが揃う秋の大型建築＆恐竜討伐企画が開催。',
+        imageUrl: 'https://images.unsplash.com/photo-1542751371-adc38448a05e?auto=format&fit=crop&w=800&q=80' },
+      { id: 'news-2', category: 'AIトレンド', source: 'AI Tech Times', timeAgo: '4時間前',
+        title: 'Claude 5.5ファミリー＆自律動作型アプリ『Claude Duet』が発表される。プログラミングとリサーチの自動化が新次元へ',
+        summary: 'バックグラウンドでリサーチやコード修正を自動並列処理するアプリのリサーチプレビューを同時開示。',
+        imageUrl: 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?auto=format&fit=crop&w=800&q=80' },
+      { id: 'news-3', category: '未来テクノロジー', source: 'サイエンス・ディスカバリー', timeAgo: '5時間前', isRecommendation: true,
+        recommendReason: 'AI・科学への関心から',
+        title: '【驚愕の最新技術】人間の夢をリアルタイム映像化？脳波と画像生成AIを繋ぐ実験が話題に',
+        summary: '脳の視覚野のシグナルを解析し、睡眠中に見ている夢の光景をAI映像として復元する試みが公開されました。',
+        imageUrl: 'https://images.unsplash.com/photo-1507413245164-6160d8298b31?auto=format&fit=crop&w=800&q=80' },
+      { id: 'news-4', category: 'スマートホーム', source: 'Smart IoT Life', timeAgo: '6時間前',
+        title: 'Home Assistant 2026.10アップデート！Matter 1.4対応＆ローカルLLM統合で家電が“意思”を持ち始める',
+        summary: 'ローカルで動作する小型音声AIと連動し、「部屋が肌寒い」と呟くだけで暖房と照明を自律実行。',
+        imageUrl: 'https://images.unsplash.com/photo-1558002038-1055907df827?auto=format&fit=crop&w=800&q=80' },
+      { id: 'news-5', category: 'レトロ・ライフスタイル', source: 'カルチャー&トレンドマガジン', timeAgo: '8時間前', isRecommendation: true,
+        recommendReason: '遊び度の設定から',
+        title: 'なぜ『昭和のダイヤル式電話』のカチャカチャ音が海外Z世代の間で癒やしASMRとして大バズりしているのか',
+        summary: 'レトロガジェットの打鍵感やダイヤルが戻る機械音に魅了される若者が急増中。',
+        imageUrl: 'https://images.unsplash.com/photo-1520923642038-b4259acecbd7?auto=format&fit=crop&w=800&q=80' },
+      { id: 'news-6', category: 'ホロライブ', source: 'ホロプロダクション公式プレス', timeAgo: '12時間前',
+        title: '【ホロライブ】儒烏風亭らでん、台湾「旧好藝術節」コラボ決定！現地フォトブースや伝統宴会との豪華企画発表',
+        summary: '台湾・高雄の歴史アートフェスティバルと公式コラボ。展示・限定グッズが展開されます。',
+        imageUrl: 'https://images.unsplash.com/photo-1528164344705-47542687990d?auto=format&fit=crop&w=800&q=80' }
+    ];
+
+    // オートコンプリートの候補（スポーツは含めていません）
+    const TOPIC_DICTIONARY = [
+      'ホロライブ', 'にじさんじ', 'VTuber', 'スマートホーム', 'Home Assistant', 'IoT', 'AIトレンド', '生成AI',
+      'ChatGPT', 'Claude', 'Gemini', 'プログラミング', 'Webアプリ開発', 'Obsidian', 'ガジェット', 'iPhone', 'Android',
+      'カメラ', 'ホームシアター', 'オーディオ', 'レトロゲーム', 'Nintendo Switch', 'PlayStation', 'アニメ', '映画', 'ドラマ',
+      '漫画', '宇宙雑学', '天文', '科学ニュース', '量子コンピュータ', 'キャンプ', 'ガーデニング', '料理', 'レシピ',
+      '旅行', '鉄道', '歴史', '経済', '副業', 'ネット販売', '物流', 'DIY', 'Starlink', 'ネットワーク', '自作PC', '健康'
+    ];
+    const PRESETS = ['ホロライブ', 'スマートホーム', 'AIトレンド', 'レトロゲーム', '宇宙雑学'];
+    const DEFAULT_TOPICS = ['ホロライブ', 'AIトレンド', 'スマートホーム'];
+    const STORE_KEY = 'discover_app_state_v2';
+
+    /* =========================================================
+       状態の保存・読み込み
+       ========================================================= */
+    function loadState() {
+      const base = { topics: [...DEFAULT_TOPICS], playfulness: 50, savedIds: ['news-2'], likedIds: [],
+        dismissedIds: [], extraArticles: [], theme: 'dark', hintSeen: false };
+      try {
+        const raw = localStorage.getItem(STORE_KEY);
+        if (raw) return { ...base, ...JSON.parse(raw) };
+        const old = localStorage.getItem('discover_app_state'); // Gemini版の保存データを引き継ぐ
+        if (old) {
+          const o = JSON.parse(old);
+          return { ...base, topics: o.topics || base.topics, playfulness: o.playfulness ?? 50, savedIds: o.savedIds || base.savedIds };
+        }
+      } catch (e) { /* 読めなくても初期値で動かす */ }
+      return base;
+    }
+    function persist() {
+      try { localStorage.setItem(STORE_KEY, JSON.stringify(state)); } catch (e) { /* 保存できない環境でも動かす */ }
+    }
+
+    let state = loadState();
+    let feed = [];               // 現在のフィードに並べる記事IDの順番
+    let activeChip = 'ALL';
+    let loading = false;
+
+    const $ = (sel) => document.querySelector(sel);
+    const esc = (s) => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+    const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+    const allArticles = () => [...state.extraArticles, ...ARTICLES];
+    const findArticle = (id) => allArticles().find(a => a.id === id);
+
+    function fmtAgo(a) {
+      if (!a.createdAt) return a.timeAgo || '';
+      const min = Math.floor((Date.now() - a.createdAt) / 60000);
+      if (min < 1) return 'たった今';
+      if (min < 60) return `${min}分前`;
+      if (min < 1440) return `${Math.floor(min / 60)}時間前`;
+      return `${Math.floor(min / 1440)}日前`;
+    }
+
+    /* =========================================================
+       フィードの組み立て
+       ========================================================= */
+    // 「意外な記事」を遊び度に応じた確率で混ぜる（更新時だけ抽選するので、操作のたびに記事が入れ替わらない）
+    function buildFeed() {
+      const pool = allArticles().filter(a => !state.dismissedIds.includes(a.id));
+      const main = pool.filter(a => !a.isRecommendation).map(a => a.id);
+      const recs = pool.filter(a => a.isRecommendation && Math.random() < state.playfulness / 100);
+      recs.forEach(a => {
+        const pos = 1 + Math.floor(Math.random() * Math.max(1, main.length));
+        main.splice(pos, 0, a.id);
+      });
+      feed = main;
+    }
+
+    function visibleArticles() {
+      return feed.map(findArticle).filter(a => a && !state.dismissedIds.includes(a.id)).filter(a => {
+        if (activeChip === 'REC') return a.isRecommendation;
+        if (activeChip !== 'ALL') return !a.isRecommendation && a.category === activeChip;
+        return a.isRecommendation || state.topics.includes(a.category);
+      });
+    }
+
+    function cardHTML(a) {
+      const saved = state.savedIds.includes(a.id);
+      const liked = state.likedIds.includes(a.id);
+      return `
+        <div class="swipe" data-id="${esc(a.id)}">
+          <div class="swipe-bg">
+            <div class="bg-save">${icon('bookmark')}${saved ? '保存解除' : '保存'}</div>
+            <div class="bg-dismiss">興味なし${icon('ban')}</div>
+          </div>
+          <article class="card">
+            ${a.isRecommendation ? `<div class="rec">${icon('sparkles', 'sm')}<span>意外な発見：${esc(a.recommendReason || 'あなたへの提案')}</span></div>` : ''}
+            <div class="thumb">
+              ${a.imageUrl ? `<img src="${esc(a.imageUrl)}" alt="" loading="lazy" onerror="this.remove()">` : ''}
+              <span class="cat">${esc(a.category)}</span>
+            </div>
+            <div class="card-body">
+              <div class="meta"><span class="src">${icon('globe', 'sm')}${esc(a.source)}</span><span>${esc(fmtAgo(a))}</span></div>
+              <h2 data-act="open">${esc(a.title)}</h2>
+              <p class="sum">${esc(a.summary)}</p>
+              <div class="bar">
+                <button class="icon-btn ${liked ? 'liked' : ''}" data-act="like" aria-label="高評価">${icon('heart', liked ? 'fill' : '')}</button>
+                <button class="icon-btn ${saved ? 'saved' : ''}" data-act="save" aria-label="保存">${icon('bookmark', saved ? 'fill' : '')}</button>
+                <button class="icon-btn" data-act="share" aria-label="共有">${icon('share')}</button>
+                <span class="spacer"></span>
+                <button class="icon-btn" data-act="more" aria-label="メニュー">${icon('more')}</button>
+              </div>
+            </div>
+          </article>
+        </div>`;
+    }
+
+    function render() {
+      const list = visibleArticles();
+      $('#feed-stat').textContent = `${list.length}件`;
+      $('#empty').hidden = list.length > 0;
+      $('#feed').innerHTML = list.map(cardHTML).join('');
+      renderChips();
+      renderSavedBadge();
+    }
+
+    // スケルトンスクリーン（読み込み中の仮表示）
+    function renderSkeleton(n = 3) {
+      $('#empty').hidden = true;
+      $('#feed-stat').textContent = '読み込み中…';
+      $('#feed').innerHTML = Array.from({ length: n }, () => `
+        <div class="skel" aria-hidden="true">
+          <div class="sk img"></div>
+          <div class="sk line" style="width:40%"></div>
+          <div class="sk line" style="width:92%;height:16px"></div>
+          <div class="sk line" style="width:75%;height:16px"></div>
+          <div class="sk line" style="width:60%"></div>
+        </div>`).join('');
+    }
+
+    function renderChips() {
+      const chips = [['ALL', '✨ すべて'], ...state.topics.map(t => [t, t]), ['REC', '🎲 発見']];
+      if (!chips.some(([v]) => v === activeChip)) activeChip = 'ALL';
+      $('#chips').innerHTML = chips.map(([v, label]) =>
+        `<button class="chip ${v === activeChip ? 'active' : ''}" data-chip="${esc(v)}">${esc(label)}</button>`).join('');
+    }
+
+    function renderSavedBadge() {
+      const n = state.savedIds.filter(id => findArticle(id)).length;
+      const b = $('#saved-badge');
+      b.hidden = n === 0;
+      b.textContent = n;
+    }
+
+    /* =========================================================
+       更新（プルトゥリフレッシュ・更新ボタン共通）
+       ========================================================= */
+    async function refresh(showMessage = true) {
+      if (loading) return;
+      loading = true;
+      $('#refresh-btn svg').classList.add('spin');
+      renderSkeleton();
+      await sleep(900); // 本来はここで記事を取得する（今はサンプルなので待つだけ）
+      buildFeed();
+      render();
+      $('#refresh-btn svg').classList.remove('spin');
+      loading = false;
+      if (showMessage) toast('フィードを更新しました');
+    }
+
+    /* =========================================================
+       記事への操作
+       ========================================================= */
+    function toggleSave(id) {
+      const was = state.savedIds.includes(id);
+      state.savedIds = was ? state.savedIds.filter(x => x !== id) : [...state.savedIds, id];
+      persist(); render(); renderSavedList();
+      toast(was ? '保存を解除しました' : 'あとで読むに保存しました', '元に戻す', () => {
+        state.savedIds = was ? [...state.savedIds, id] : state.savedIds.filter(x => x !== id);
+        persist(); render(); renderSavedList();
+      });
+    }
+
+    function toggleLike(id) {
+      const was = state.likedIds.includes(id);
+      state.likedIds = was ? state.likedIds.filter(x => x !== id) : [...state.likedIds, id];
+      persist(); render();
+      toast(was ? '高評価を取り消しました' : '高評価を記録しました');
+    }
+
+    function dismiss(id) {
+      if (!state.dismissedIds.includes(id)) state.dismissedIds.push(id);
+      persist(); render();
+      toast('「興味なし」にしました', '元に戻す', () => {
+        state.dismissedIds = state.dismissedIds.filter(x => x !== id);
+        persist(); render();
+      });
+    }
+
+    // カードを畳むアニメーションのあとに非表示にする
+    function animateDismiss(wrap, id) {
+      wrap.style.height = wrap.offsetHeight + 'px';
+      wrap.classList.add('collapse');
+      requestAnimationFrame(() => {
+        wrap.style.height = '0px';
+        wrap.style.opacity = '0';
+        wrap.style.marginBottom = '-14px';
+      });
+      setTimeout(() => dismiss(id), 260);
+    }
+
+    async function shareArticle(id) {
+      const a = findArticle(id);
+      if (!a) return;
+      if (navigator.share) {
+        try { await navigator.share({ title: a.title, text: a.title }); } catch (e) { /* キャンセル */ }
+      } else if (navigator.clipboard) {
+        try { await navigator.clipboard.writeText(a.title); toast('タイトルをコピーしました'); } catch (e) { toast('コピーできませんでした'); }
+      }
+    }
+
+    function openArticle(id) {
+      toast('サンプル記事のため、リンク先はありません');
+    }
+
+    /* =========================================================
+       話題（トピック）の追加・削除
+       ========================================================= */
+    function addTopic(name) {
+      const t = name.trim();
+      if (!t) return;
+      if (state.topics.includes(t)) { toast(`「${t}」はフォロー済みです`); return; }
+      state.topics.push(t);
+      // Gemini版と同じく、追加した話題のサンプル記事を1件作る
+      const a = { id: `custom-${Date.now()}`, category: t, source: 'サンプル', createdAt: Date.now(),
+        title: `『${t}』の話題（サンプル記事）`,
+        summary: `「${t}」をフォローしたときに表示されるサンプルです。実際の記事取得はまだ実装されていません。`,
+        imageUrl: '' };
+      state.extraArticles.unshift(a);
+      feed.unshift(a.id);
+      persist(); render(); renderTopics();
+      toast(`「${t}」をフォローしました`, '取り消す', () => removeTopic(t, true));
+    }
+
+    function removeTopic(t, silent = false) {
+      const extras = state.extraArticles.filter(a => a.category === t);
+      state.topics = state.topics.filter(x => x !== t);
+      persist(); render(); renderTopics();
+      if (!silent) {
+        toast(`「${t}」のフォローを解除しました`, '元に戻す', () => {
+          if (!state.topics.includes(t)) state.topics.push(t);
+          extras.forEach(a => { if (!feed.includes(a.id)) feed.unshift(a.id); });
+          persist(); render(); renderTopics();
+        });
+      }
+    }
+
+    function renderTopics() {
+      $('#topic-count').textContent = `${state.topics.length}件`;
+      $('#topic-tags').innerHTML = state.topics.map(t =>
+        `<span class="tag-pill">${esc(t)}<button data-remove="${esc(t)}" aria-label="${esc(t)}のフォローを解除">${icon('x', 'sm')}</button></span>`).join('')
+        || '<span class="muted">まだありません</span>';
+      $('#presets').innerHTML = PRESETS.map(p =>
+        `<button class="preset" data-preset="${esc(p)}" ${state.topics.includes(p) ? 'disabled' : ''}>${state.topics.includes(p) ? '✓' : '+'} ${esc(p)}</button>`).join('');
+    }
+
+    /* =========================================================
+       オートコンプリート
+       ========================================================= */
+    // カタカナ→ひらがな、全角→半角、大文字→小文字にそろえて比較する
+    const toHira = (s) => s.replace(/[ァ-ヶ]/g, c => String.fromCharCode(c.charCodeAt(0) - 0x60));
+    const norm = (s) => toHira(s.normalize('NFKC').toLowerCase());
+
+    function attachAutocomplete(input, listEl, onPick) {
+      let items = [];
+      let index = -1;
+
+      function highlight(text, q) {
+        const n = norm(text), i = n.indexOf(norm(q));
+        if (i < 0 || n.length !== text.length) return esc(text);
+        return esc(text.slice(0, i)) + '<mark>' + esc(text.slice(i, i + q.length)) + '</mark>' + esc(text.slice(i + q.length));
+      }
+
+      function update() {
+        const q = input.value.trim();
+        if (!q) { hide(); return; }
+        const nq = norm(q);
+        const candidates = [...new Set([...TOPIC_DICTIONARY, ...allArticles().map(a => a.category)])];
+        const matched = candidates
+          .map(t => ({ t, i: norm(t).indexOf(nq) }))
+          .filter(x => x.i >= 0)
+          .sort((a, b) => (a.i === 0 ? 0 : 1) - (b.i === 0 ? 0 : 1) || a.t.length - b.t.length)
+          .slice(0, 6)
+          .map(x => ({ value: x.t, followed: state.topics.includes(x.t) }));
+        if (!matched.some(m => norm(m.value) === nq)) matched.push({ value: q, isNew: true });
+        items = matched;
+        index = -1;
+        listEl.innerHTML = items.map((it, i) => `
+          <li class="ac-item" role="option" data-i="${i}">
+            ${icon(it.isNew ? 'plus' : 'tag', 'sm')}
+            <span>${it.isNew ? `「${esc(it.value)}」を新しくフォロー` : highlight(it.value, q)}</span>
+            ${it.followed ? '<span class="tag">フォロー中</span>' : ''}
+          </li>`).join('');
+        listEl.hidden = false;
+      }
+
+      function hide() { listEl.hidden = true; items = []; index = -1; }
+      function setActive(i) {
+        index = i;
+        listEl.querySelectorAll('.ac-item').forEach((el, k) => el.classList.toggle('active', k === i));
+        listEl.querySelector('.ac-item.active')?.scrollIntoView({ block: 'nearest' });
+      }
+      function pick(i) {
+        const it = items[i];
+        if (!it) return;
+        onPick(it.value);
+        input.value = '';
+        hide();
+      }
+
+      input.addEventListener('input', update);
+      input.addEventListener('focus', update);
+      input.addEventListener('blur', () => setTimeout(hide, 120));
+      input.addEventListener('keydown', (e) => {
+        if (e.isComposing || e.keyCode === 229) return; // 日本語の変換確定中のEnterは無視
+        if (listEl.hidden) return;
+        if (e.key === 'ArrowDown') { e.preventDefault(); setActive(Math.min(items.length - 1, index + 1)); }
+        else if (e.key === 'ArrowUp') { e.preventDefault(); setActive(Math.max(0, index - 1)); }
+        else if (e.key === 'Enter') { e.preventDefault(); pick(index >= 0 ? index : 0); input.blur(); }
+        else if (e.key === 'Escape') { hide(); }
+      });
+      // タップ時に入力欄のフォーカスが外れないよう pointerdown で確定する
+      listEl.addEventListener('pointerdown', (e) => {
+        const li = e.target.closest('.ac-item');
+        if (!li) return;
+        e.preventDefault();
+        pick(Number(li.dataset.i));
+      });
+    }
+
+    /* =========================================================
+       トースト（「元に戻す」ボタン付き）
+       ========================================================= */
+    let toastTimer;
+    function toast(msg, actionLabel, onAction) {
+      const t = $('#toast'), btn = $('#toast-action');
+      $('#toast-msg').textContent = msg;
+      if (actionLabel) {
+        btn.hidden = false;
+        btn.textContent = actionLabel;
+        btn.onclick = () => { hideToast(); onAction(); };
+      } else {
+        btn.hidden = true;
+        btn.onclick = null;
+      }
+      t.classList.add('show');
+      clearTimeout(toastTimer);
+      toastTimer = setTimeout(hideToast, actionLabel ? 5000 : 2800);
+    }
+    function hideToast() { $('#toast').classList.remove('show'); }
+
+    /* =========================================================
+       ボトムシート
+       ========================================================= */
+    let currentSheet = null;
+    function openSheet(id) {
+      if (currentSheet) currentSheet.classList.remove('open');
+      currentSheet = document.getElementById(id);
+      currentSheet.classList.add('open');
+      $('#backdrop').classList.add('show');
+      document.body.classList.add('lock');
+    }
+    function closeSheet() {
+      if (!currentSheet) return;
+      currentSheet.classList.remove('open');
+      currentSheet = null;
+      $('#backdrop').classList.remove('show');
+      document.body.classList.remove('lock');
+    }
+
+    // つまみ部分を下にドラッグして閉じる
+    function setupSheetDrag() {
+      document.querySelectorAll('.sheet-head').forEach(head => {
+        let drag = null;
+        head.addEventListener('pointerdown', (e) => {
+          if (e.target.closest('button')) return;
+          const sheet = head.closest('.sheet');
+          drag = { sheet, y0: e.clientY, t0: performance.now(), dy: 0 };
+          head.setPointerCapture(e.pointerId);
+          sheet.classList.add('dragging');
+        });
+        head.addEventListener('pointermove', (e) => {
+          if (!drag) return;
+          drag.dy = Math.max(0, e.clientY - drag.y0);
+          drag.sheet.style.transform = `translateY(${drag.dy}px)`;
+          $('#backdrop').style.opacity = String(1 - Math.min(1, drag.dy / drag.sheet.offsetHeight));
+        });
+        const end = () => {
+          if (!drag) return;
+          const { sheet, dy, t0 } = drag;
+          drag = null;
+          sheet.classList.remove('dragging');
+          sheet.style.transform = '';
+          $('#backdrop').style.opacity = '';
+          const speed = dy / (performance.now() - t0);
+          if (dy > 110 || (speed > 0.6 && dy > 24)) closeSheet();
+        };
+        head.addEventListener('pointerup', end);
+        head.addEventListener('pointercancel', end);
+      });
+    }
+
+    function renderSavedList() {
+      const saved = state.savedIds.map(findArticle).filter(Boolean);
+      $('#saved-list').innerHTML = saved.length
+        ? saved.map(a => `<div class="saved-item"><span>${esc(a.title)}</span>
+            <button class="icon-btn" data-unsave="${esc(a.id)}" aria-label="保存を解除">${icon('trash', 'sm')}</button></div>`).join('')
+        : '<p class="muted" style="padding:16px 0">保存した記事はまだありません。カードを右にスワイプすると保存できます。</p>';
+    }
+
+    function openActions(id) {
+      const a = findArticle(id);
+      if (!a) return;
+      const saved = state.savedIds.includes(id);
+      const following = state.topics.includes(a.category);
+      $('#actions-title').textContent = a.title;
+      $('#actions-list').innerHTML = `
+        <button data-do="save">${icon('bookmark', saved ? 'fill' : '')}${saved ? '保存を解除' : 'あとで読むに保存'}</button>
+        <button data-do="share">${icon('share')}共有</button>
+        <button data-do="follow">${icon(following ? 'check' : 'plus')}「${esc(a.category)}」を${following ? 'フォロー解除' : 'フォロー'}</button>
+        <button data-do="dismiss" class="danger">${icon('ban')}興味なし</button>`;
+      $('#actions-list').dataset.id = id;
+      openSheet('sheet-actions');
+    }
+
+    /* =========================================================
+       スワイプ操作 & 長押し（カード）
+       ========================================================= */
+    let swipe = null;
+    let longPressTimer = null;
+    let suppressClickUntil = 0;
+
+    function setupSwipe() {
+      const feedEl = $('#feed');
+
+      feedEl.addEventListener('pointerdown', (e) => {
+        const card = e.target.closest('.card');
+        if (!card || e.button > 0 || loading) return;
+        const wrap = card.parentElement;
+        swipe = { card, wrap, id: wrap.dataset.id, x0: e.clientX, y0: e.clientY, dx: 0, mode: null, pid: e.pointerId, armed: false };
+        clearTimeout(longPressTimer);
+        longPressTimer = setTimeout(() => {
+          if (swipe && !swipe.mode) {
+            swipe.mode = 'longpress';
+            navigator.vibrate?.(10);
+            openActions(swipe.id);
+          }
+        }, 550);
+      });
+
+      window.addEventListener('pointermove', (e) => {
+        if (!swipe || e.pointerId !== swipe.pid) return;
+        const dx = e.clientX - swipe.x0, dy = e.clientY - swipe.y0;
+        if (!swipe.mode && (Math.abs(dx) > 8 || Math.abs(dy) > 8)) {
+          clearTimeout(longPressTimer);
+          if (Math.abs(dx) > Math.abs(dy) * 1.2) {
+            swipe.mode = 'h';
+            swipe.card.classList.add('dragging');
+            try { swipe.card.setPointerCapture(e.pointerId); } catch (err) {}
+          } else {
+            swipe.mode = 'v';
+          }
+        }
+        if (swipe.mode !== 'h') return;
+        swipe.dx = dx;
+        swipe.card.style.transform = `translateX(${dx}px)`;
+        swipe.wrap.dataset.dir = dx > 0 ? 'right' : 'left';
+        const armed = Math.abs(dx) > threshold(swipe.card);
+        if (armed !== swipe.armed) {
+          swipe.armed = armed;
+          swipe.wrap.classList.toggle('armed', armed);
+          if (armed) navigator.vibrate?.(8);
+        }
+      });
+
+      const end = () => {
+        clearTimeout(longPressTimer);
+        if (!swipe) return;
+        const s = swipe;
+        swipe = null;
+        if (s.mode === 'longpress') { suppressClickUntil = Date.now() + 500; return; }
+        if (s.mode !== 'h') return;
+        suppressClickUntil = Date.now() + 400;
+        s.card.classList.remove('dragging');
+        const w = s.card.offsetWidth;
+        if (s.dx < -threshold(s.card)) {
+          // 左スワイプ：画面外へ飛ばして「興味なし」
+          s.card.style.transform = `translateX(${-w * 1.2}px)`;
+          setTimeout(() => animateDismiss(s.wrap, s.id), 180);
+        } else {
+          s.card.style.transform = '';
+          s.wrap.classList.remove('armed');
+          setTimeout(() => { delete s.wrap.dataset.dir; }, 250);
+          if (s.dx > threshold(s.card)) setTimeout(() => toggleSave(s.id), 200); // 右スワイプ：保存
+        }
+      };
+      window.addEventListener('pointerup', end);
+      window.addEventListener('pointercancel', end);
+
+      // ボタンやタイトルのタップ
+      feedEl.addEventListener('click', (e) => {
+        if (Date.now() < suppressClickUntil) { e.preventDefault(); e.stopPropagation(); return; }
+        const el = e.target.closest('[data-act]');
+        if (!el) return;
+        const id = el.closest('.swipe').dataset.id;
+        ({ like: toggleLike, save: toggleSave, share: shareArticle, more: openActions, open: openArticle })[el.dataset.act]?.(id);
+      });
+    }
+    const threshold = (card) => Math.min(110, card.offsetWidth * 0.3);
+
+    /* =========================================================
+       プルトゥリフレッシュ（引っぱって更新）
+       ========================================================= */
+    function setupPullToRefresh() {
+      const mainEl = $('#main'), ptr = $('#ptr'), text = $('#ptr-text');
+      const TRIGGER = 70;
+      let p = null;
+
+      function setPull(d) {
+        mainEl.style.setProperty('--pull', d + 'px');
+        ptr.style.setProperty('--ptr-o', Math.min(1, d / 40));
+        ptr.style.setProperty('--ptr-rot', d >= TRIGGER ? '180deg' : '0deg');
+      }
+
+      document.addEventListener('touchstart', (e) => {
+        if (currentSheet || loading || window.scrollY > 0 || e.touches.length > 1) return;
+        p = { y0: e.touches[0].clientY, x0: e.touches[0].clientX, dist: 0, decided: false };
+        mainEl.classList.remove('release');
+      }, { passive: true });
+
+      document.addEventListener('touchmove', (e) => {
+        if (!p) return;
+        const dy = e.touches[0].clientY - p.y0, dx = e.touches[0].clientX - p.x0;
+        if (!p.decided) {
+          if (Math.abs(dx) < 6 && Math.abs(dy) < 6) return;
+          if (Math.abs(dx) > Math.abs(dy) || dy < 0) { p = null; return; } // 横移動・上方向は対象外
+          p.decided = true;
+        }
+        if (swipe && swipe.mode === 'h') { p = null; setPull(0); return; }
+        e.preventDefault();
+        p.dist = Math.min(120, Math.max(0, dy) * 0.5);
+        setPull(p.dist);
+        text.textContent = p.dist >= TRIGGER ? '離して更新' : '引っぱって更新';
+      }, { passive: false });
+
+      document.addEventListener('touchend', async () => {
+        if (!p) return;
+        const go = p.dist >= TRIGGER;
+        p = null;
+        mainEl.classList.add('release');
+        if (!go) { setPull(0); return; }
+        setPull(56);
+        ptr.classList.add('loading');
+        text.textContent = '更新中…';
+        await refresh(true);
+        ptr.classList.remove('loading');
+        setPull(0);
+      });
+    }
+
+    /* =========================================================
+       テーマ・その他
+       ========================================================= */
+    function applyTheme() {
+      document.documentElement.dataset.theme = state.theme;
+      document.querySelector('meta[name="theme-color"]').setAttribute('content', state.theme === 'dark' ? '#2d2e30' : '#ffffff');
+      const old = $('#theme-icon');
+      const wrap = document.createElement('span');
+      wrap.innerHTML = icon(state.theme === 'dark' ? 'sun' : 'moon');
+      wrap.firstElementChild.id = 'theme-icon';
+      old.replaceWith(wrap.firstElementChild);
+    }
+
+    function updatePlayLabel() {
+      const v = state.playfulness;
+      $('#play-val').textContent = v < 30 ? `${v}%（堅実）` : v > 70 ? `${v}%（冒険）` : `${v}%`;
+    }
+
+    function setupEvents() {
+      $('#refresh-btn').addEventListener('click', () => refresh(true));
+      $('#settings-btn').addEventListener('click', () => openSheet('sheet-settings'));
+      $('#empty-settings').addEventListener('click', () => openSheet('sheet-settings'));
+      $('#saved-btn').addEventListener('click', () => { renderSavedList(); openSheet('sheet-saved'); });
+      $('#theme-btn').addEventListener('click', () => {
+        state.theme = state.theme === 'dark' ? 'light' : 'dark';
+        persist(); applyTheme();
+      });
+      $('#backdrop').addEventListener('click', closeSheet);
+      document.querySelectorAll('[data-close]').forEach(b => b.addEventListener('click', closeSheet));
+      document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeSheet(); });
+
+      $('#hint-close').addEventListener('click', () => { state.hintSeen = true; persist(); $('#hint').hidden = true; });
+
+      $('#chips').addEventListener('click', (e) => {
+        const c = e.target.closest('[data-chip]');
+        if (!c) return;
+        activeChip = c.dataset.chip;
+        render();
+        c.scrollIntoView?.({ inline: 'nearest', block: 'nearest' });
+      });
+
+      const slider = $('#play-slider');
+      slider.addEventListener('input', () => { state.playfulness = Number(slider.value); updatePlayLabel(); });
+      slider.addEventListener('change', () => { persist(); buildFeed(); render(); toast(`遊び度を ${state.playfulness}% にしました`); });
+
+      $('#topic-tags').addEventListener('click', (e) => {
+        const b = e.target.closest('[data-remove]');
+        if (b) removeTopic(b.dataset.remove);
+      });
+      $('#presets').addEventListener('click', (e) => {
+        const b = e.target.closest('[data-preset]');
+        if (b && !b.disabled) addTopic(b.dataset.preset);
+      });
+      $('#saved-list').addEventListener('click', (e) => {
+        const b = e.target.closest('[data-unsave]');
+        if (b) toggleSave(b.dataset.unsave);
+      });
+      $('#actions-list').addEventListener('click', (e) => {
+        const b = e.target.closest('[data-do]');
+        if (!b) return;
+        const id = $('#actions-list').dataset.id;
+        const a = findArticle(id);
+        closeSheet();
+        if (b.dataset.do === 'save') toggleSave(id);
+        if (b.dataset.do === 'share') shareArticle(id);
+        if (b.dataset.do === 'follow') state.topics.includes(a.category) ? removeTopic(a.category) : addTopic(a.category);
+        if (b.dataset.do === 'dismiss') {
+          const wrap = document.querySelector(`.swipe[data-id="${CSS.escape(id)}"]`);
+          wrap ? animateDismiss(wrap, id) : dismiss(id);
+        }
+      });
+      $('#reset-btn').addEventListener('click', () => {
+        const theme = state.theme;
+        state = { ...loadStateDefaults(), theme };
+        persist(); closeSheet(); applyTheme(); renderTopics(); updatePlayLabel();
+        $('#play-slider').value = state.playfulness;
+        refresh(false).then(() => toast('初期設定に戻しました'));
+      });
+
+      attachAutocomplete($('#quick-input'), $('#quick-ac'), addTopic);
+      attachAutocomplete($('#topic-input'), $('#topic-ac'), addTopic);
+    }
+
+    function loadStateDefaults() {
+      return { topics: [...DEFAULT_TOPICS], playfulness: 50, savedIds: [], likedIds: [],
+        dismissedIds: [], extraArticles: [], theme: 'dark', hintSeen: true };
+    }
+
+    /* =========================================================
+       起動
+       ========================================================= */
+    function init() {
+      hydrateIcons();
+      applyTheme();
+      $('#play-slider').value = state.playfulness;
+      updatePlayLabel();
+      renderTopics();
+      $('#hint').hidden = state.hintSeen;
+      setupEvents();
+      setupSheetDrag();
+      setupSwipe();
+      setupPullToRefresh();
+      refresh(false);
+    }
+    window.addEventListener('DOMContentLoaded', init);
+  </script>
+</body>
+</html>
