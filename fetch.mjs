@@ -105,6 +105,7 @@ export function toArticle(item, extra) {
   let source = item.source;
   // Googleニュースは「タイトル - 媒体名」の形なので分ける
   if (extra.via === 'google' && source && title.endsWith(` - ${source}`)) title = title.slice(0, -(source.length + 3));
+  if (extra.source) source = extra.source;
   if (!source) source = hostOf(item.link);
   const time = Date.parse(item.date);
   return {
@@ -141,6 +142,12 @@ export async function main() {
     all.push(...items.slice(0, (cfg.perTopicMax || 25) * 2));
   }
 
+  console.log('■ YouTubeチャンネルの収集');
+  for (const ch of cfg.youtube || []) {
+    const items = await getFeed(`https://www.youtube.com/feeds/videos.xml?channel_id=${encodeURIComponent(ch.channelId)}`, `YouTube「${ch.name}」`);
+    all.push(...items.slice(0, ch.max || 6).map((i) => toArticle(i, { topics: ch.topic ? [ch.topic] : [], via: 'youtube', feed: 'YouTube', source: ch.name })));
+  }
+
   console.log('■ 発見用フィードの収集');
   for (const f of cfg.discover) {
     const items = await getFeed(f.url, f.name);
@@ -173,6 +180,7 @@ export async function main() {
   const count = {};
   let discoverCount = 0;
   list = list.filter((a) => {
+    if (a.via === 'youtube') return true; // YouTubeはチャンネルごとの件数で別に制限済み
     if (a.topics.length) {
       const key = a.topics[0];
       count[key] = (count[key] || 0) + 1;

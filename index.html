@@ -177,6 +177,10 @@
     .card .sub .saved-i { color: var(--accent); }
     .card .more { width: 32px; height: 28px; display: grid; place-items: center; color: var(--muted); margin-right: -8px; border-radius: 8px; }
     .card .more:active { background: var(--card-2); }
+    .fav.yt { background: #ff0033; color: #fff; font-size: 8px; }
+    .thumb .play { position: absolute; right: 6px; bottom: 6px; width: 26px; height: 26px; border-radius: 50%; display: grid; place-items: center;
+      background: rgba(0, 0, 0, .65); color: #fff; font-size: 11px; padding-left: 2px; }
+    .card.hero .thumb .play { width: 44px; height: 44px; font-size: 18px; right: 12px; bottom: 12px; }
     .card.hero { padding: 14px 16px 10px; }
     .card.hero .thumb { border-radius: 16px; margin-bottom: 10px; }
     .card.hero h2 { font-size: 18px; line-height: 1.45; margin: 4px 0 6px; }
@@ -563,8 +567,8 @@
       const link = (inner) => `<a href="${esc(a.url)}" target="_blank" rel="noopener" data-act="open" draggable="false">${inner}</a>`;
       const thumb = `<a class="thumb ${a.image ? '' : 'noimg'}" href="${esc(a.url)}" target="_blank" rel="noopener" data-act="open" draggable="false">
           ${a.image ? `<img src="${esc(a.image)}" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.parentElement.classList.add('noimg');this.remove()">` : ''}
-          <span class="ph">${letter}</span></a>`;
-      const src = `<div class="src"><span class="fav">${letter}</span>${esc(a.source)}</div>`;
+          <span class="ph">${letter}</span>${a.via === 'youtube' ? '<span class="play" aria-label="動画">▶</span>' : ''}</a>`;
+      const src = `<div class="src"><span class="fav ${a.via === 'youtube' ? 'yt' : ''}">${a.via === 'youtube' ? '▶' : letter}</span>${esc(a.source)}${a.via === 'youtube' ? ' · YouTube' : ''}</div>`;
       const sub = `<div class="sub"><span>${esc(fmtAgo(a.published))} · ${label}${a.bookmarks ? ` · ${a.bookmarks} users` : ''}</span>
           ${liked ? icon('heart', 'sm fill liked-i') : ''}${saved ? icon('bookmark', 'sm fill saved-i') : ''}
           <button class="more" data-act="more" aria-label="メニュー">${icon('more', 'sm')}</button></div>`;
