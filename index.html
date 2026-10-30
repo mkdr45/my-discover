@@ -550,6 +550,11 @@
     }
 
     function visibleArticles() {
+      // 話題タブでは、件数制限なしでその話題の記事をすべて表示する
+      if (activeChip !== 'ALL' && activeChip !== 'REC') {
+        return data.articles.filter(a => !state.dismissedIds.includes(a.id) && matchedTopics(a).includes(activeChip))
+          .sort((x, y) => score(y) - score(x));
+      }
       return feed.map(id => data.articles.find(a => a.id === id)).filter(a => a && !state.dismissedIds.includes(a.id)).filter(a => {
         const topics = matchedTopics(a);
         if (activeChip === 'REC') return topics.length === 0;
