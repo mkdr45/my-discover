@@ -1,0 +1,48 @@
+name: 記事を収集して公開
+
+on:
+  schedule:
+    - cron: "*/30 * * * *"   # 30分ごと（GitHub側の混雑で遅れることがあります）
+  workflow_dispatch:          # 手動実行ボタン
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: 記事を収集
+        run: node fetch.mjs
+
+      - name: 公開用フォルダを作成
+        run: |
+          mkdir -p _site
+          cp index.html manifest.json sw.js articles.json sources.json *.png _site/
+
+      - uses: actions/configure-pages@v5
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+      - name: GitHub Pages に公開
+        id: deployment
+        uses: actions/deploy-pages@v4
