@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="ja" data-theme="dark">
+<html lang="ja" data-theme="light">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
@@ -24,7 +24,7 @@
   <style>
     /* ===== 色の定義（ダーク / ライト） ===== */
     :root {
-      --bg: #202124; --card: #2d2e30; --card-2: #3a3b3e; --border: #3c4043;
+      --bg: #1b1c1e; --card: #1b1c1e; --card-2: #2d2e31; --border: #3c4043; --line: #2c2d30; --fav-bg: #28324a;
       --text: #e8eaed; --muted: #9aa0a6; --accent: #8ab4f8; --on-accent: #202124;
       --amber: #fdd663; --amber-bg: rgba(253, 214, 99, .12);
       --danger: #f28b82; --ok: #81c995;
@@ -34,7 +34,7 @@
       color-scheme: dark;
     }
     :root[data-theme="light"] {
-      --bg: #f8f9fa; --card: #ffffff; --card-2: #f1f3f4; --border: #e0e0e0;
+      --bg: #ffffff; --card: #ffffff; --card-2: #f1f3f4; --border: #e8eaed; --line: #f1f3f4; --fav-bg: #e8f0fe;
       --text: #202124; --muted: #5f6368; --accent: #1a73e8; --on-accent: #ffffff;
       --amber: #b06000; --amber-bg: rgba(251, 188, 4, .16);
       --danger: #d93025; --ok: #188038;
@@ -62,17 +62,19 @@
     /* ===== ヘッダー ===== */
     .app-header {
       position: sticky; top: 0; z-index: 20;
-      display: flex; align-items: center; justify-content: space-between; gap: 8px;
-      padding: calc(8px + env(safe-area-inset-top)) 12px 8px 16px;
+      display: flex; flex-direction: column;
+      padding: env(safe-area-inset-top) 0 0;
       background: var(--card);
       background: color-mix(in srgb, var(--card) 90%, transparent);
       backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
       border-bottom: 1px solid var(--border);
     }
-    .brand { display: flex; align-items: center; gap: 10px; min-width: 0; }
+    .hbar { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 8px 8px 2px 16px; }
+    .brand { min-width: 0; }
+    .brand h1 em { font-style: normal; color: var(--accent); }
     .brand-icon { width: 36px; height: 36px; border-radius: 50%; display: grid; place-items: center;
       color: var(--accent); background: color-mix(in srgb, var(--accent) 18%, transparent); }
-    .brand h1 { font-size: 17px; margin: 0; line-height: 1.2; }
+    .brand h1 { font-size: 19px; font-weight: 800; margin: 0; line-height: 1.2; letter-spacing: -.01em; }
     .brand p { font-size: 11px; color: var(--muted); margin: 2px 0 0; }
     .actions { display: flex; align-items: center; }
     .icon-btn { width: 40px; height: 40px; border-radius: 50%; display: grid; place-items: center; position: relative; }
@@ -84,7 +86,7 @@
 
     /* ===== メイン & プルトゥリフレッシュ ===== */
     main { position: relative; max-width: 640px; margin: 0 auto;
-      padding: 14px 16px calc(96px + env(safe-area-inset-bottom));
+      padding: 12px 0 calc(96px + env(safe-area-inset-bottom));
       transform: translateY(var(--pull, 0px)); }
     main.release { transition: transform .3s ease; }
     .ptr { position: absolute; top: -48px; left: 50%; transform: translateX(-50%);
@@ -95,6 +97,7 @@
     .ptr.loading .icon { animation: spin .8s linear infinite; }
 
     /* ===== 検索 & オートコンプリート ===== */
+    #quick-field { margin: 0 16px 4px; height: 42px; background: var(--card-2); border-color: transparent; }
     .field { position: relative; display: flex; align-items: center; gap: 8px; height: 46px; padding: 0 12px 0 14px;
       background: var(--card); border: 1px solid var(--border); border-radius: 23px; color: var(--muted); }
     .field:focus-within { border-color: var(--accent); }
@@ -112,15 +115,13 @@
     .ac-item .icon { color: var(--muted); }
 
     /* ===== チップ ===== */
-    .chips-row { display: flex; align-items: center; gap: 8px; margin: 12px 0; }
-    .chips { display: flex; gap: 6px; overflow-x: auto; scrollbar-width: none; flex: 1; min-width: 0; }
+    .chips { display: flex; gap: 20px; overflow-x: auto; scrollbar-width: none; padding: 0 16px; }
     .chips::-webkit-scrollbar { display: none; }
-    .chip { white-space: nowrap; font-size: 13px; padding: 7px 14px; border-radius: 18px;
-      background: var(--card); border: 1px solid var(--border); color: var(--muted); }
-    .chip.active { background: var(--accent); border-color: var(--accent); color: var(--on-accent); font-weight: 600; }
+    .chip { white-space: nowrap; font-size: 14px; padding: 9px 0 8px; color: var(--muted); border-bottom: 3px solid transparent; }
+    .chip.active { color: var(--accent); border-bottom-color: var(--accent); font-weight: 700; }
     .stat { font-size: 11px; color: var(--muted); white-space: nowrap; }
 
-    .hint { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; padding: 8px 6px 8px 12px;
+    .hint { display: flex; align-items: center; gap: 8px; margin: 8px 16px 4px; padding: 8px 6px 8px 12px;
       font-size: 12px; color: var(--muted); border: 1px dashed var(--border); border-radius: 12px; }
     .hint span { flex: 1; }
 
@@ -160,6 +161,38 @@
     .bar .liked { color: var(--danger); }
     .bar .saved { color: var(--accent); }
     .spacer { flex: 1; }
+
+    /* ===== B案：リスト表示 ===== */
+    .feed { gap: 0; }
+    .swipe { border-radius: 0; border-bottom: 1px solid var(--line); }
+    .swipe-bg { border-radius: 0; }
+    .card { border: 0; border-radius: 0; background: var(--bg); }
+    .card .src { display: flex; align-items: center; gap: 6px; font-size: 11px; color: var(--muted); min-width: 0; white-space: nowrap; overflow: hidden; }
+    .fav { width: 16px; height: 16px; flex: none; border-radius: 4px; background: var(--fav-bg); color: var(--accent);
+      font-size: 10px; font-weight: 800; display: grid; place-items: center; }
+    .card .sub { display: flex; align-items: center; gap: 4px; font-size: 11px; color: var(--muted); }
+    .card .sub > span:first-child { flex: 1; min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+    .card .sub .rec-l { color: var(--amber); font-weight: 700; }
+    .card .sub .liked-i { color: var(--danger); }
+    .card .sub .saved-i { color: var(--accent); }
+    .card .more { width: 32px; height: 28px; display: grid; place-items: center; color: var(--muted); margin-right: -8px; border-radius: 8px; }
+    .card .more:active { background: var(--card-2); }
+    .card.hero { padding: 14px 16px 10px; }
+    .card.hero .thumb { border-radius: 16px; margin-bottom: 10px; }
+    .card.hero h2 { font-size: 18px; line-height: 1.45; margin: 4px 0 6px; }
+    .card.row { display: flex; gap: 12px; padding: 14px 16px 10px; }
+    .card.row .txt { flex: 1; min-width: 0; }
+    .card.row h3 { font-size: 14.5px; line-height: 1.5; margin: 4px 0 4px; font-weight: 700;
+      display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+    .card.row .thumb, .card.row .thumb.noimg { width: 84px; height: 84px; aspect-ratio: auto; flex: none; border-radius: 12px; margin-top: 2px; }
+    .card.row .thumb .ph { font-size: 26px; }
+    .skel.list { display: flex; gap: 12px; padding: 16px; border: 0; border-bottom: 1px solid var(--line); border-radius: 0; background: var(--bg); }
+    .skel.list .grow { flex: 1; }
+    .skel.list .sk.line { margin: 0 0 10px; }
+    .skel.list .sk.box { width: 84px; height: 84px; border-radius: 12px; flex: none; }
+    .skel.hero { border: 0; border-radius: 0; background: var(--bg); padding: 14px 16px 16px; border-bottom: 1px solid var(--line); }
+    .skel.hero .sk.img { border-radius: 16px; }
+    .skel.hero .sk.line { margin: 12px 0 0; }
 
     /* ===== スケルトン ===== */
     .skel { background: var(--card); border: 1px solid var(--border); border-radius: 18px; overflow: hidden; padding-bottom: 12px; }
@@ -232,12 +265,10 @@
 
   <!-- ヘッダー -->
   <header class="app-header">
+   <div class="hbar">
     <div class="brand">
-      <div class="brand-icon"><i data-icon="compass"></i></div>
-      <div>
-        <h1>My Discover</h1>
-        <p id="updated">記事を読み込み中…</p>
-      </div>
+      <h1>My <em>Discover</em></h1>
+      <p id="updated">記事を読み込み中…</p>
     </div>
     <div class="actions">
       <button id="refresh-btn" class="icon-btn" aria-label="フィードを更新"><i data-icon="refresh"></i></button>
@@ -245,6 +276,9 @@
       <button id="theme-btn" class="icon-btn" aria-label="テーマ切り替え"><i data-icon="sun" id="theme-icon"></i></button>
       <button id="settings-btn" class="icon-btn" aria-label="チューニング"><i data-icon="sliders"></i></button>
     </div>
+   </div>
+    <nav class="chips" id="chips" aria-label="話題で絞り込み"></nav>
+    <span id="feed-stat" hidden></span>
   </header>
 
   <main id="main">
@@ -258,16 +292,10 @@
       <ul class="ac-list" id="quick-ac" role="listbox" hidden></ul>
     </div>
 
-    <!-- 絞り込みチップ -->
-    <div class="chips-row">
-      <div class="chips" id="chips"></div>
-      <span class="stat" id="feed-stat"></span>
-    </div>
-
     <!-- 操作ヒント（初回のみ） -->
     <div class="hint" id="hint" hidden>
       <i data-icon="sparkles" class="sm"></i>
-      <span>カードを ← で「興味なし」、→ で「保存」。長押しでメニュー</span>
+      <span>記事を ← で「興味なし」、→ で「保存」。長押しか「…」でメニュー</span>
       <button class="icon-btn" id="hint-close" aria-label="ヒントを閉じる"><i data-icon="x" class="sm"></i></button>
     </div>
 
@@ -409,7 +437,8 @@
         dismissedIds: [],
         seenIds: [],           // 新着の判定用
         affinity: { topic: {}, source: {} }, // 反応から学習した好み
-        theme: 'dark',
+        theme: 'light',
+        design: 'B',
         hintSeen: false
       };
     }
@@ -417,7 +446,12 @@
       const base = defaults();
       try {
         const raw = localStorage.getItem(STORE_KEY);
-        if (raw) return { ...base, ...JSON.parse(raw) };
+        if (raw) {
+          const parsed = JSON.parse(raw);
+          const st = { ...base, ...parsed };
+          if (!parsed.design) st.theme = 'light'; // B案に切り替えた最初の1回だけ明るい配色にする
+          return st;
+        }
         const old = JSON.parse(localStorage.getItem('discover_app_state_v2') || 'null');
         if (old) return { ...base, topics: old.topics || null, theme: old.theme || 'dark', hintSeen: !!old.hintSeen };
       } catch (e) { /* 読めなくても初期値で動かす */ }
@@ -520,38 +554,30 @@
       });
     }
 
-    function cardHTML(a) {
+    function cardHTML(a, i) {
       const saved = !!state.savedItems[a.id];
       const liked = state.likedIds.includes(a.id);
       const topics = matchedTopics(a);
-      const isDiscover = topics.length === 0;
-      const label = isDiscover ? (a.feed || '発見') : topics[0];
+      const label = topics.length ? esc(topics[0]) : `<span class="rec-l">🎲 ${esc(a.feed || '発見')}</span>`;
+      const letter = esc((a.source || '?').slice(0, 1).toUpperCase());
+      const link = (inner) => `<a href="${esc(a.url)}" target="_blank" rel="noopener" data-act="open" draggable="false">${inner}</a>`;
+      const thumb = `<a class="thumb ${a.image ? '' : 'noimg'}" href="${esc(a.url)}" target="_blank" rel="noopener" data-act="open" draggable="false">
+          ${a.image ? `<img src="${esc(a.image)}" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.parentElement.classList.add('noimg');this.remove()">` : ''}
+          <span class="ph">${letter}</span></a>`;
+      const src = `<div class="src"><span class="fav">${letter}</span>${esc(a.source)}</div>`;
+      const sub = `<div class="sub"><span>${esc(fmtAgo(a.published))} · ${label}${a.bookmarks ? ` · ${a.bookmarks} users` : ''}</span>
+          ${liked ? icon('heart', 'sm fill liked-i') : ''}${saved ? icon('bookmark', 'sm fill saved-i') : ''}
+          <button class="more" data-act="more" aria-label="メニュー">${icon('more', 'sm')}</button></div>`;
+      const body = i === 0
+        ? `<article class="card hero">${thumb}${src}<h2>${link(esc(a.title))}</h2>${sub}</article>`
+        : `<article class="card row"><div class="txt">${src}<h3>${link(esc(a.title))}</h3>${sub}</div>${thumb}</article>`;
       return `
         <div class="swipe" data-id="${esc(a.id)}">
           <div class="swipe-bg">
             <div class="bg-save">${icon('bookmark')}${saved ? '保存解除' : '保存'}</div>
             <div class="bg-dismiss">興味なし${icon('ban')}</div>
           </div>
-          <article class="card">
-            ${isDiscover ? `<div class="rec">${icon('sparkles', 'sm')}<span>意外な発見：${esc(a.feed || 'おすすめ')}</span></div>` : ''}
-            <a class="thumb ${a.image ? '' : 'noimg'}" href="${esc(a.url)}" target="_blank" rel="noopener" data-act="open" draggable="false">
-              ${a.image ? `<img src="${esc(a.image)}" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.parentElement.classList.add('noimg');this.remove()">` : ''}
-              <span class="ph">${esc((a.source || '?').slice(0, 1))}</span>
-              <span class="cat">${esc(label)}</span>
-            </a>
-            <div class="card-body">
-              <div class="meta"><span class="src">${icon('globe', 'sm')}${esc(a.source)}</span><span>${esc(fmtAgo(a.published))}</span></div>
-              <h2><a href="${esc(a.url)}" target="_blank" rel="noopener" data-act="open" draggable="false">${esc(a.title)}</a></h2>
-              <div class="bar">
-                <button class="icon-btn ${liked ? 'liked' : ''}" data-act="like" aria-label="高評価">${icon('heart', liked ? 'fill' : '')}</button>
-                <button class="icon-btn ${saved ? 'saved' : ''}" data-act="save" aria-label="保存">${icon('bookmark', saved ? 'fill' : '')}</button>
-                <button class="icon-btn" data-act="share" aria-label="共有">${icon('share')}</button>
-                ${a.bookmarks ? `<span class="users">${a.bookmarks} users</span>` : ''}
-                <span class="spacer"></span>
-                <button class="icon-btn" data-act="more" aria-label="メニュー">${icon('more')}</button>
-              </div>
-            </div>
-          </article>
+          ${body}
         </div>`;
     }
 
@@ -569,13 +595,14 @@
     function renderSkeleton(n = 3) {
       $('#empty').hidden = true;
       $('#feed-stat').textContent = '読み込み中…';
-      $('#feed').innerHTML = Array.from({ length: n }, () => `
-        <div class="skel" aria-hidden="true">
-          <div class="sk img"></div>
-          <div class="sk line" style="width:40%"></div>
-          <div class="sk line" style="width:92%;height:16px"></div>
-          <div class="sk line" style="width:75%;height:16px"></div>
-        </div>`).join('');
+      $('#feed').innerHTML = `
+        <div class="skel hero" aria-hidden="true"><div class="sk img"></div>
+          <div class="sk line" style="width:35%"></div><div class="sk line" style="width:95%;height:16px"></div><div class="sk line" style="width:70%;height:16px"></div></div>` +
+        Array.from({ length: n + 2 }, () => `
+        <div class="skel list" aria-hidden="true"><div class="grow">
+          <div class="sk line" style="width:40%"></div><div class="sk line" style="width:95%;height:14px"></div>
+          <div class="sk line" style="width:80%;height:14px"></div><div class="sk line" style="width:30%"></div></div>
+          <div class="sk box"></div></div>`).join('');
     }
 
     function renderChips() {
@@ -893,6 +920,7 @@
       $('#actions-title').textContent = a.title;
       $('#actions-list').innerHTML = `
         <button data-do="open">${icon('external')}記事を開く</button>
+        <button data-do="like">${icon('heart', state.likedIds.includes(id) ? 'fill' : '')}${state.likedIds.includes(id) ? '高評価を取り消す' : '高評価（似た記事を増やす）'}</button>
         <button data-do="save">${icon('bookmark', saved ? 'fill' : '')}${saved ? '保存を解除' : 'あとで読むに保存'}</button>
         <button data-do="share">${icon('share')}共有</button>
         ${topic ? `<button data-do="unfollow">${icon('check')}「${esc(topic)}」のフォローを解除</button>` : ''}
@@ -1044,7 +1072,7 @@
        ========================================================= */
     function applyTheme() {
       document.documentElement.dataset.theme = state.theme;
-      document.querySelector('meta[name="theme-color"]').setAttribute('content', state.theme === 'dark' ? '#2d2e30' : '#ffffff');
+      document.querySelector('meta[name="theme-color"]').setAttribute('content', state.theme === 'dark' ? '#1b1c1e' : '#ffffff');
       const old = $('#theme-icon');
       const wrap = document.createElement('span');
       wrap.innerHTML = icon(state.theme === 'dark' ? 'sun' : 'moon');
@@ -1103,6 +1131,7 @@
         const a = findArticle(id);
         closeSheet();
         if (b.dataset.do === 'open' && a) { openArticle(id); window.open(a.url, '_blank', 'noopener'); }
+        if (b.dataset.do === 'like') toggleLike(id);
         if (b.dataset.do === 'save') toggleSave(id);
         if (b.dataset.do === 'share') shareArticle(id);
         if (b.dataset.do === 'unfollow' && topic) removeTopic(topic);
