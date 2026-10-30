@@ -167,7 +167,8 @@ export async function main() {
   let list = all.filter((a) => {
     const text = (a.title + ' ' + a.source).toLowerCase();
     if (exclude.some((w) => text.includes(w))) return false;
-    if (a.published && Date.parse(a.published) < minTime) return false;
+    const limit = a.via === 'youtube' ? Date.now() - (cfg.youtubeMaxAgeDays || 7) * 86400000 : minTime; // 動画は7日分
+    if (a.published && Date.parse(a.published) < limit) return false;
     const nt = normTitle(a.title);
     if (seenUrl.has(a.url) || seenTitle.has(nt)) return false;
     seenUrl.add(a.url); seenTitle.add(nt);
