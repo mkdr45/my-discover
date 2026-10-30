@@ -1,0 +1,25 @@
+{
+  "_説明": "記事の収集設定です。topics に話題を足すと、その話題の記事も30分ごとに集めます。keywords は検索に使う言葉（最初の言葉ではてブを検索し、全部の言葉でGoogleニュースを検索）。",
+  "topics": [
+    { "name": "ホロライブ", "keywords": ["ホロライブ", "hololive"] },
+    { "name": "AIトレンド", "keywords": ["生成AI", "ChatGPT", "Claude", "Gemini", "LLM"] },
+    { "name": "スマートホーム", "keywords": ["スマートホーム", "Home Assistant", "SwitchBot", "Matter"] },
+    { "name": "レトロゲーム", "keywords": ["レトロゲーム", "ファミコン", "スーパーファミコン"] },
+    { "name": "宇宙雑学", "keywords": ["宇宙", "JAXA", "NASA", "天体"] }
+  ],
+  "discover": [
+    { "name": "はてブ 総合", "url": "https://b.hatena.ne.jp/hotentry/all.rss" },
+    { "name": "はてブ テクノロジー", "url": "https://b.hatena.ne.jp/hotentry/it.rss" },
+    { "name": "はてブ おもしろ", "url": "https://b.hatena.ne.jp/hotentry/fun.rss" },
+    { "name": "はてブ 学び", "url": "https://b.hatena.ne.jp/hotentry/knowledge.rss" },
+    { "name": "はてブ 暮らし", "url": "https://b.hatena.ne.jp/hotentry/life.rss" },
+    { "name": "GIGAZINE", "url": "https://gigazine.net/news/rss_2.0/" },
+    { "name": "ITmedia NEWS", "url": "https://rss.itmedia.co.jp/rss/2.0/news_bursts.xml" },
+    { "name": "Impress Watch", "url": "https://www.watch.impress.co.jp/data/rss/1.0/ipw/feed.rdf" },
+    { "name": "The Verge", "url": "https://www.theverge.com/rss/index.xml" }
+  ],
+  "exclude": ["野球", "サッカー", "NPB", "MLB", "Jリーグ", "ゴルフ", "競馬", "大谷翔平", "W杯", "ワールドカップ", "五輪", "オリンピック", "大相撲", "テニス", "ラグビー", "バスケ", "Bリーグ", "F1", "スポーツ"],
+  "maxAgeDays": 3,
+  "perTopicMax": 25,
+  "discoverMax": 80
+}

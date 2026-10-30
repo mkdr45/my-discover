@@ -142,16 +142,19 @@
     .card.dragging { transition: none; }
     .rec { display: flex; align-items: center; gap: 6px; padding: 7px 14px; font-size: 11px; font-weight: 600;
       color: var(--amber); background: var(--amber-bg); }
-    .thumb { position: relative; aspect-ratio: 16 / 9; background: linear-gradient(135deg, var(--card-2), var(--border)); }
+    .thumb { position: relative; display: block; aspect-ratio: 16 / 9; overflow: hidden; background: linear-gradient(135deg, var(--card-2), var(--border)); -webkit-touch-callout: none; }
+    .thumb .ph { display: none; position: absolute; inset: 0; place-items: center; font-size: 48px; font-weight: 700; color: var(--muted); opacity: .5; }
+    .thumb.noimg { aspect-ratio: 16 / 6; }
+    .thumb.noimg .ph { display: grid; }
+    .card a { color: inherit; text-decoration: none; -webkit-touch-callout: none; }
+    .users { font-size: 11px; font-weight: 600; color: var(--danger); margin-left: 4px; }
     .thumb img { width: 100%; height: 100%; object-fit: cover; display: block; pointer-events: none; -webkit-user-drag: none; }
     .thumb .cat { position: absolute; top: 10px; left: 10px; font-size: 11px; color: #fff;
       background: rgba(0, 0, 0, .55); padding: 3px 10px; border-radius: 12px; }
     .card-body { padding: 12px 14px 4px; }
     .meta { display: flex; justify-content: space-between; gap: 8px; font-size: 12px; color: var(--muted); margin-bottom: 6px; }
     .meta .src { display: flex; align-items: center; gap: 4px; min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
-    .card h2 { font-size: 16px; line-height: 1.45; margin: 0 0 6px; cursor: pointer; }
-    .card .sum { font-size: 13px; line-height: 1.6; color: var(--muted); margin: 0 0 6px;
-      display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+    .card h2 { font-size: 16px; line-height: 1.45; margin: 0 0 8px; }
     .bar { display: flex; align-items: center; margin: 0 -8px; border-top: 1px solid var(--border); }
     .bar .icon-btn { color: var(--muted); }
     .bar .liked { color: var(--danger); }
@@ -207,7 +210,8 @@
     .action-list button:active { background: var(--card-2); }
     .action-list .danger { color: var(--danger); }
     .saved-item { display: flex; align-items: center; gap: 10px; padding: 8px 0; border-bottom: 1px solid var(--border); font-size: 13px; }
-    .saved-item span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .saved-item a { flex: 1; min-width: 0; color: var(--text); text-decoration: none; line-height: 1.4; }
+    .saved-item small { display: block; color: var(--muted); font-size: 11px; margin-top: 2px; }
     .muted { color: var(--muted); font-size: 12px; }
 
     /* ===== トースト ===== */
@@ -232,7 +236,7 @@
       <div class="brand-icon"><i data-icon="compass"></i></div>
       <div>
         <h1>My Discover</h1>
-        <p>サンプルデータで表示中</p>
+        <p id="updated">記事を読み込み中…</p>
       </div>
     </div>
     <div class="actions">
@@ -272,7 +276,7 @@
     <div id="empty" class="empty" hidden>
       <i data-icon="inbox" class="lg"></i>
       <h3>表示できる記事がありません</h3>
-      <p>話題をフォローするか、チューニングで「遊び度」を上げてみてください。</p>
+      <p>話題をフォローするか、チューニングで「意外な記事の割合」を上げてみてください。</p>
       <button class="btn" id="empty-settings">チューニングを開く</button>
     </div>
   </main>
@@ -289,8 +293,8 @@
     <div class="sheet-body">
       <div class="section">
         <div class="panel">
-          <div class="slider-head"><span>遊び度（意外性）</span><span class="slider-val" id="play-val">50%</span></div>
-          <input type="range" id="play-slider" min="0" max="100" step="10" value="50">
+          <div class="slider-head"><span>意外な記事の割合</span><span class="slider-val" id="play-val">50%</span></div>
+          <input type="range" id="play-slider" min="0" max="80" step="10" value="20">
           <div class="slider-ends"><span>🎯 本命ニュース</span><span>🎲 意外な発見</span></div>
         </div>
       </div>
@@ -304,11 +308,12 @@
         <div class="tags" id="topic-tags"></div>
       </div>
       <div class="section">
-        <h3><span>おすすめから追加</span></h3>
+        <h3><span>自動収集している話題</span></h3>
+        <p class="muted" style="margin:0 0 8px">ここにない話題をフォローすると、集めた記事のうちタイトルに含むものを表示します。</p>
         <div class="tags" id="presets"></div>
       </div>
       <div class="section">
-        <button class="btn ghost" id="reset-btn">初期設定に戻す</button>
+        <button class="btn ghost" id="reset-btn">学習内容と設定を初期化</button>
       </div>
     </div>
   </section>
@@ -361,7 +366,8 @@
       trash: '<path d="M3 6h18M19 6l-1 14H6L5 6M9 6V4h6v2"/>',
       check: '<path d="M20 6 9 17l-5-5"/>',
       tag: '<path d="M20.6 13.4 13.4 20.6a2 2 0 0 1-2.8 0L3 13V3h10l7.6 7.6a2 2 0 0 1 0 2.8z"/><circle cx="7.5" cy="7.5" r="1"/>',
-      inbox: '<path d="M22 12h-6l-2 3h-4l-2-3H2"/><path d="M5.5 5h13L22 12v6a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2v-6z"/>'
+      inbox: '<path d="M22 12h-6l-2 3h-4l-2-3H2"/><path d="M5.5 5h13L22 12v6a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2v-6z"/>',
+      external: '<path d="M15 3h6v6M10 14 21 3M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>'
     };
     function icon(name, cls = '') {
       return `<svg class="icon ${cls}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICONS[name] || ''}</svg>`;
@@ -377,63 +383,43 @@
     }
 
     /* =========================================================
-       サンプルデータ（Gemini版の記事。すべて架空です）
+       設定値
        ========================================================= */
-    const ARTICLES = [
-      { id: 'news-1', category: 'ホロライブ', source: 'VTuber News Online', timeAgo: '2時間前',
-        title: '【ホロライブ】白銀ノエルの『ホロ鯖ARK』特大企画に同時接続数急上昇！ファン歓喜のハロウィンイベント開幕',
-        summary: 'ホロライブ所属の白銀ノエルが配信したホロ鯖ARKにて、豪華メンバーが揃う秋の大型建築＆恐竜討伐企画が開催。',
-        imageUrl: 'https://images.unsplash.com/photo-1542751371-adc38448a05e?auto=format&fit=crop&w=800&q=80' },
-      { id: 'news-2', category: 'AIトレンド', source: 'AI Tech Times', timeAgo: '4時間前',
-        title: 'Claude 5.5ファミリー＆自律動作型アプリ『Claude Duet』が発表される。プログラミングとリサーチの自動化が新次元へ',
-        summary: 'バックグラウンドでリサーチやコード修正を自動並列処理するアプリのリサーチプレビューを同時開示。',
-        imageUrl: 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?auto=format&fit=crop&w=800&q=80' },
-      { id: 'news-3', category: '未来テクノロジー', source: 'サイエンス・ディスカバリー', timeAgo: '5時間前', isRecommendation: true,
-        recommendReason: 'AI・科学への関心から',
-        title: '【驚愕の最新技術】人間の夢をリアルタイム映像化？脳波と画像生成AIを繋ぐ実験が話題に',
-        summary: '脳の視覚野のシグナルを解析し、睡眠中に見ている夢の光景をAI映像として復元する試みが公開されました。',
-        imageUrl: 'https://images.unsplash.com/photo-1507413245164-6160d8298b31?auto=format&fit=crop&w=800&q=80' },
-      { id: 'news-4', category: 'スマートホーム', source: 'Smart IoT Life', timeAgo: '6時間前',
-        title: 'Home Assistant 2026.10アップデート！Matter 1.4対応＆ローカルLLM統合で家電が“意思”を持ち始める',
-        summary: 'ローカルで動作する小型音声AIと連動し、「部屋が肌寒い」と呟くだけで暖房と照明を自律実行。',
-        imageUrl: 'https://images.unsplash.com/photo-1558002038-1055907df827?auto=format&fit=crop&w=800&q=80' },
-      { id: 'news-5', category: 'レトロ・ライフスタイル', source: 'カルチャー&トレンドマガジン', timeAgo: '8時間前', isRecommendation: true,
-        recommendReason: '遊び度の設定から',
-        title: 'なぜ『昭和のダイヤル式電話』のカチャカチャ音が海外Z世代の間で癒やしASMRとして大バズりしているのか',
-        summary: 'レトロガジェットの打鍵感やダイヤルが戻る機械音に魅了される若者が急増中。',
-        imageUrl: 'https://images.unsplash.com/photo-1520923642038-b4259acecbd7?auto=format&fit=crop&w=800&q=80' },
-      { id: 'news-6', category: 'ホロライブ', source: 'ホロプロダクション公式プレス', timeAgo: '12時間前',
-        title: '【ホロライブ】儒烏風亭らでん、台湾「旧好藝術節」コラボ決定！現地フォトブースや伝統宴会との豪華企画発表',
-        summary: '台湾・高雄の歴史アートフェスティバルと公式コラボ。展示・限定グッズが展開されます。',
-        imageUrl: 'https://images.unsplash.com/photo-1528164344705-47542687990d?auto=format&fit=crop&w=800&q=80' }
-    ];
-
-    // オートコンプリートの候補（スポーツは含めていません）
+    // オートコンプリートの候補（収集中の話題に加えて表示。スポーツは含めていません）
     const TOPIC_DICTIONARY = [
       'ホロライブ', 'にじさんじ', 'VTuber', 'スマートホーム', 'Home Assistant', 'IoT', 'AIトレンド', '生成AI',
       'ChatGPT', 'Claude', 'Gemini', 'プログラミング', 'Webアプリ開発', 'Obsidian', 'ガジェット', 'iPhone', 'Android',
       'カメラ', 'ホームシアター', 'オーディオ', 'レトロゲーム', 'Nintendo Switch', 'PlayStation', 'アニメ', '映画', 'ドラマ',
-      '漫画', '宇宙雑学', '天文', '科学ニュース', '量子コンピュータ', 'キャンプ', 'ガーデニング', '料理', 'レシピ',
-      '旅行', '鉄道', '歴史', '経済', '副業', 'ネット販売', '物流', 'DIY', 'Starlink', 'ネットワーク', '自作PC', '健康'
+      '漫画', '宇宙雑学', '天文', '科学', '量子コンピュータ', 'キャンプ', 'ガーデニング', '料理', 'レシピ',
+      '旅行', '鉄道', '歴史', '経済', '副業', 'ネット販売', '物流', 'DIY', 'Starlink', 'ネットワーク', '自作PC', 'セキュリティ'
     ];
-    const PRESETS = ['ホロライブ', 'スマートホーム', 'AIトレンド', 'レトロゲーム', '宇宙雑学'];
-    const DEFAULT_TOPICS = ['ホロライブ', 'AIトレンド', 'スマートホーム'];
-    const STORE_KEY = 'discover_app_state_v2';
+    const STORE_KEY = 'discover_app_state_v3';
+    const DATA_URL = './articles.json';
+    const FEED_LIMIT = 60;
 
     /* =========================================================
        状態の保存・読み込み
        ========================================================= */
+    function defaults() {
+      return {
+        topics: null,          // null = 収集中の話題をすべてフォロー
+        playfulness: 20,       // 意外な記事の割合（％）
+        savedItems: {},        // 保存した記事（元の記事が消えても残るよう中身ごと保存）
+        likedIds: [],
+        dismissedIds: [],
+        seenIds: [],           // 新着の判定用
+        affinity: { topic: {}, source: {} }, // 反応から学習した好み
+        theme: 'dark',
+        hintSeen: false
+      };
+    }
     function loadState() {
-      const base = { topics: [...DEFAULT_TOPICS], playfulness: 50, savedIds: ['news-2'], likedIds: [],
-        dismissedIds: [], extraArticles: [], theme: 'dark', hintSeen: false };
+      const base = defaults();
       try {
         const raw = localStorage.getItem(STORE_KEY);
         if (raw) return { ...base, ...JSON.parse(raw) };
-        const old = localStorage.getItem('discover_app_state'); // Gemini版の保存データを引き継ぐ
-        if (old) {
-          const o = JSON.parse(old);
-          return { ...base, topics: o.topics || base.topics, playfulness: o.playfulness ?? 50, savedIds: o.savedIds || base.savedIds };
-        }
+        const old = JSON.parse(localStorage.getItem('discover_app_state_v2') || 'null');
+        if (old) return { ...base, topics: old.topics || null, theme: old.theme || 'dark', hintSeen: !!old.hintSeen };
       } catch (e) { /* 読めなくても初期値で動かす */ }
       return base;
     }
@@ -442,51 +428,104 @@
     }
 
     let state = loadState();
+    let data = { updatedAt: null, topics: [], articles: [] };
     let feed = [];               // 現在のフィードに並べる記事IDの順番
     let activeChip = 'ALL';
     let loading = false;
 
     const $ = (sel) => document.querySelector(sel);
-    const esc = (s) => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+    const esc = (s) => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
     const sleep = (ms) => new Promise(r => setTimeout(r, ms));
-    const allArticles = () => [...state.extraArticles, ...ARTICLES];
-    const findArticle = (id) => allArticles().find(a => a.id === id);
+    const toHira = (s) => s.replace(/[ァ-ヶ]/g, c => String.fromCharCode(c.charCodeAt(0) - 0x60));
+    const norm = (s) => toHira(String(s).normalize('NFKC').toLowerCase());
+    const followed = () => state.topics ?? data.topics.map(t => t.name);
+    const findArticle = (id) => data.articles.find(a => a.id === id) || state.savedItems[id];
 
-    function fmtAgo(a) {
-      if (!a.createdAt) return a.timeAgo || '';
-      const min = Math.floor((Date.now() - a.createdAt) / 60000);
+    function fmtAgo(iso) {
+      const t = Date.parse(iso);
+      if (!Number.isFinite(t)) return '';
+      const min = Math.floor((Date.now() - t) / 60000);
       if (min < 1) return 'たった今';
       if (min < 60) return `${min}分前`;
       if (min < 1440) return `${Math.floor(min / 60)}時間前`;
       return `${Math.floor(min / 1440)}日前`;
     }
+    function fmtClock(iso) {
+      const d = new Date(iso);
+      return Number.isFinite(d.getTime()) ? `${d.getMonth() + 1}/${d.getDate()} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}` : '';
+    }
+
+    /* =========================================================
+       話題の判定と並び順（反応から学習）
+       ========================================================= */
+    // その記事が、フォロー中のどの話題に当たるか
+    function matchedTopics(a) {
+      const list = followed();
+      const collected = new Map(data.topics.map(t => [t.name, t.keywords]));
+      return list.filter(name => {
+        if (a.topics?.includes(name)) return true;
+        const words = [name, ...(collected.get(name) || [])];
+        const title = norm(a.title);
+        return words.some(w => title.includes(norm(w)));
+      });
+    }
+
+    // 好みの記録：開いた・保存した・高評価 → プラス、興味なし → マイナス
+    function learn(a, weight) {
+      if (!a) return;
+      const aff = state.affinity;
+      const topics = matchedTopics(a);
+      (topics.length ? topics : ['発見']).forEach(t => { aff.topic[t] = (aff.topic[t] || 0) + weight; });
+      if (a.source) aff.source[a.source] = (aff.source[a.source] || 0) + weight;
+      persist();
+    }
+
+    function score(a) {
+      const hours = Math.max(0, (Date.now() - (Date.parse(a.published) || Date.now())) / 3600000);
+      const fresh = Math.exp(-hours / 24);                       // 新しいほど高い
+      const popular = Math.log1p(a.bookmarks || 0) / 8;          // はてブで話題なほど少し高い
+      const topicAff = Math.max(0, ...matchedTopics(a).map(t => state.affinity.topic[t] || 0), 0);
+      const srcAff = state.affinity.source[a.source] || 0;
+      const image = a.image ? 0.05 : 0;
+      return fresh + popular + Math.tanh(topicAff / 6) * 0.5 + Math.tanh(srcAff / 6) * 0.4 + image;
+    }
 
     /* =========================================================
        フィードの組み立て
        ========================================================= */
-    // 「意外な記事」を遊び度に応じた確率で混ぜる（更新時だけ抽選するので、操作のたびに記事が入れ替わらない）
+    // 更新時だけ並びを決める（操作のたびに入れ替わらないように）
     function buildFeed() {
-      const pool = allArticles().filter(a => !state.dismissedIds.includes(a.id));
-      const main = pool.filter(a => !a.isRecommendation).map(a => a.id);
-      const recs = pool.filter(a => a.isRecommendation && Math.random() < state.playfulness / 100);
-      recs.forEach(a => {
-        const pos = 1 + Math.floor(Math.random() * Math.max(1, main.length));
-        main.splice(pos, 0, a.id);
-      });
-      feed = main;
+      const pool = data.articles.filter(a => !state.dismissedIds.includes(a.id));
+      const main = pool.filter(a => matchedTopics(a).length).sort((x, y) => score(y) - score(x));
+      const others = pool.filter(a => !matchedTopics(a).length)
+        .map(a => ({ a, s: score(a) + Math.random() * 0.6 }))  // 意外性のため少しランダム
+        .sort((x, y) => y.s - x.s).map(x => x.a);
+      const p = Math.min(0.8, state.playfulness / 100);
+      const mainCount = Math.min(main.length, Math.round(FEED_LIMIT * (1 - p)));
+      const discoverCount = Math.min(others.length, p >= 0.999 ? FEED_LIMIT : Math.round(mainCount * p / (1 - p)) || (p > 0 ? 1 : 0));
+      const picked = main.slice(0, mainCount).map(a => a.id);
+      const extras = others.slice(0, discoverCount).map(a => a.id);
+      // 意外な記事を均等に散らして混ぜる
+      const step = extras.length ? Math.max(2, Math.floor(picked.length / extras.length)) : 0;
+      extras.forEach((id, i) => picked.splice(Math.min(picked.length, (i + 1) * step + i), 0, id));
+      feed = picked;
     }
 
     function visibleArticles() {
-      return feed.map(findArticle).filter(a => a && !state.dismissedIds.includes(a.id)).filter(a => {
-        if (activeChip === 'REC') return a.isRecommendation;
-        if (activeChip !== 'ALL') return !a.isRecommendation && a.category === activeChip;
-        return a.isRecommendation || state.topics.includes(a.category);
+      return feed.map(id => data.articles.find(a => a.id === id)).filter(a => a && !state.dismissedIds.includes(a.id)).filter(a => {
+        const topics = matchedTopics(a);
+        if (activeChip === 'REC') return topics.length === 0;
+        if (activeChip !== 'ALL') return topics.includes(activeChip);
+        return true;
       });
     }
 
     function cardHTML(a) {
-      const saved = state.savedIds.includes(a.id);
+      const saved = !!state.savedItems[a.id];
       const liked = state.likedIds.includes(a.id);
+      const topics = matchedTopics(a);
+      const isDiscover = topics.length === 0;
+      const label = isDiscover ? (a.feed || '発見') : topics[0];
       return `
         <div class="swipe" data-id="${esc(a.id)}">
           <div class="swipe-bg">
@@ -494,19 +533,20 @@
             <div class="bg-dismiss">興味なし${icon('ban')}</div>
           </div>
           <article class="card">
-            ${a.isRecommendation ? `<div class="rec">${icon('sparkles', 'sm')}<span>意外な発見：${esc(a.recommendReason || 'あなたへの提案')}</span></div>` : ''}
-            <div class="thumb">
-              ${a.imageUrl ? `<img src="${esc(a.imageUrl)}" alt="" loading="lazy" onerror="this.remove()">` : ''}
-              <span class="cat">${esc(a.category)}</span>
-            </div>
+            ${isDiscover ? `<div class="rec">${icon('sparkles', 'sm')}<span>意外な発見：${esc(a.feed || 'おすすめ')}</span></div>` : ''}
+            <a class="thumb ${a.image ? '' : 'noimg'}" href="${esc(a.url)}" target="_blank" rel="noopener" data-act="open" draggable="false">
+              ${a.image ? `<img src="${esc(a.image)}" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.parentElement.classList.add('noimg');this.remove()">` : ''}
+              <span class="ph">${esc((a.source || '?').slice(0, 1))}</span>
+              <span class="cat">${esc(label)}</span>
+            </a>
             <div class="card-body">
-              <div class="meta"><span class="src">${icon('globe', 'sm')}${esc(a.source)}</span><span>${esc(fmtAgo(a))}</span></div>
-              <h2 data-act="open">${esc(a.title)}</h2>
-              <p class="sum">${esc(a.summary)}</p>
+              <div class="meta"><span class="src">${icon('globe', 'sm')}${esc(a.source)}</span><span>${esc(fmtAgo(a.published))}</span></div>
+              <h2><a href="${esc(a.url)}" target="_blank" rel="noopener" data-act="open" draggable="false">${esc(a.title)}</a></h2>
               <div class="bar">
                 <button class="icon-btn ${liked ? 'liked' : ''}" data-act="like" aria-label="高評価">${icon('heart', liked ? 'fill' : '')}</button>
                 <button class="icon-btn ${saved ? 'saved' : ''}" data-act="save" aria-label="保存">${icon('bookmark', saved ? 'fill' : '')}</button>
                 <button class="icon-btn" data-act="share" aria-label="共有">${icon('share')}</button>
+                ${a.bookmarks ? `<span class="users">${a.bookmarks} users</span>` : ''}
                 <span class="spacer"></span>
                 <button class="icon-btn" data-act="more" aria-label="メニュー">${icon('more')}</button>
               </div>
@@ -522,6 +562,7 @@
       $('#feed').innerHTML = list.map(cardHTML).join('');
       renderChips();
       renderSavedBadge();
+      $('#updated').textContent = data.updatedAt ? `最終収集 ${fmtClock(data.updatedAt)}` : '記事を読み込み中…';
     }
 
     // スケルトンスクリーン（読み込み中の仮表示）
@@ -534,65 +575,97 @@
           <div class="sk line" style="width:40%"></div>
           <div class="sk line" style="width:92%;height:16px"></div>
           <div class="sk line" style="width:75%;height:16px"></div>
-          <div class="sk line" style="width:60%"></div>
         </div>`).join('');
     }
 
     function renderChips() {
-      const chips = [['ALL', '✨ すべて'], ...state.topics.map(t => [t, t]), ['REC', '🎲 発見']];
+      const chips = [['ALL', '✨ すべて'], ...followed().map(t => [t, t]), ['REC', '🎲 発見']];
       if (!chips.some(([v]) => v === activeChip)) activeChip = 'ALL';
       $('#chips').innerHTML = chips.map(([v, label]) =>
         `<button class="chip ${v === activeChip ? 'active' : ''}" data-chip="${esc(v)}">${esc(label)}</button>`).join('');
     }
 
     function renderSavedBadge() {
-      const n = state.savedIds.filter(id => findArticle(id)).length;
+      const n = Object.keys(state.savedItems).length;
       const b = $('#saved-badge');
       b.hidden = n === 0;
       b.textContent = n;
     }
 
     /* =========================================================
-       更新（プルトゥリフレッシュ・更新ボタン共通）
+       記事の読み込み（プルトゥリフレッシュ・更新ボタン共通）
        ========================================================= */
+    async function loadArticles() {
+      const res = await fetch(`${DATA_URL}?t=${Date.now()}`, { cache: 'no-store' });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      return res.json();
+    }
+
     async function refresh(showMessage = true) {
       if (loading) return;
       loading = true;
       $('#refresh-btn svg').classList.add('spin');
+      const hadData = data.articles.length > 0;
       renderSkeleton();
-      await sleep(900); // 本来はここで記事を取得する（今はサンプルなので待つだけ）
-      buildFeed();
-      render();
-      $('#refresh-btn svg').classList.remove('spin');
-      loading = false;
-      if (showMessage) toast('フィードを更新しました');
+      const started = Date.now();
+      try {
+        const json = await loadArticles();
+        await sleep(Math.max(0, 500 - (Date.now() - started))); // スケルトンが一瞬で消えないように
+        const seen = new Set(state.seenIds);
+        const fresh = json.articles.filter(a => !seen.has(a.id)).length;
+        data = json;
+        state.seenIds = json.articles.map(a => a.id);
+        state.dismissedIds = state.dismissedIds.slice(-1000);
+        persist();
+        buildFeed();
+        render();
+        if (showMessage) toast(hadData ? (fresh ? `新着 ${fresh}件を読み込みました` : '新しい記事はまだありません') : '記事を読み込みました');
+      } catch (e) {
+        render();
+        toast('記事を読み込めませんでした。通信状態を確認してください', '再試行', () => refresh(true));
+      } finally {
+        $('#refresh-btn svg').classList.remove('spin');
+        loading = false;
+      }
     }
 
     /* =========================================================
        記事への操作
        ========================================================= */
+    function snapshot(a) {
+      return { id: a.id, title: a.title, url: a.url, source: a.source, image: a.image, published: a.published, topics: a.topics, feed: a.feed };
+    }
+
     function toggleSave(id) {
-      const was = state.savedIds.includes(id);
-      state.savedIds = was ? state.savedIds.filter(x => x !== id) : [...state.savedIds, id];
-      persist(); render(); renderSavedList();
-      toast(was ? '保存を解除しました' : 'あとで読むに保存しました', '元に戻す', () => {
-        state.savedIds = was ? [...state.savedIds, id] : state.savedIds.filter(x => x !== id);
+      const a = findArticle(id);
+      if (!a) return;
+      const was = !!state.savedItems[id];
+      const apply = (on) => {
+        if (on) state.savedItems[id] = snapshot(a); else delete state.savedItems[id];
         persist(); render(); renderSavedList();
-      });
+      };
+      apply(!was);
+      if (!was) learn(a, 2);
+      toast(was ? '保存を解除しました' : 'あとで読むに保存しました', '元に戻す', () => apply(was));
     }
 
     function toggleLike(id) {
+      const a = findArticle(id);
       const was = state.likedIds.includes(id);
-      state.likedIds = was ? state.likedIds.filter(x => x !== id) : [...state.likedIds, id];
+      state.likedIds = was ? state.likedIds.filter(x => x !== id) : [...state.likedIds, id].slice(-1000);
+      learn(a, was ? -2 : 2);
       persist(); render();
-      toast(was ? '高評価を取り消しました' : '高評価を記録しました');
+      toast(was ? '高評価を取り消しました' : '高評価しました。似た記事が上に来やすくなります');
     }
 
     function dismiss(id) {
+      const a = findArticle(id);
       if (!state.dismissedIds.includes(id)) state.dismissedIds.push(id);
+      learn(a, -2);
       persist(); render();
       toast('「興味なし」にしました', '元に戻す', () => {
         state.dismissedIds = state.dismissedIds.filter(x => x !== id);
+        learn(a, 2);
         persist(); render();
       });
     }
@@ -613,64 +686,56 @@
       const a = findArticle(id);
       if (!a) return;
       if (navigator.share) {
-        try { await navigator.share({ title: a.title, text: a.title }); } catch (e) { /* キャンセル */ }
+        try { await navigator.share({ title: a.title, url: a.url }); } catch (e) { /* キャンセル */ }
       } else if (navigator.clipboard) {
-        try { await navigator.clipboard.writeText(a.title); toast('タイトルをコピーしました'); } catch (e) { toast('コピーできませんでした'); }
+        try { await navigator.clipboard.writeText(`${a.title}\n${a.url}`); toast('タイトルとURLをコピーしました'); } catch (e) { toast('コピーできませんでした'); }
       }
     }
 
     function openArticle(id) {
-      toast('サンプル記事のため、リンク先はありません');
+      learn(findArticle(id), 1); // 開いた記事を好みとして記録
     }
 
     /* =========================================================
-       話題（トピック）の追加・削除
+       話題（トピック）のフォロー
        ========================================================= */
+    function setTopics(list) {
+      state.topics = list;
+      persist();
+      buildFeed(); render(); renderTopics();
+    }
+
     function addTopic(name) {
       const t = name.trim();
       if (!t) return;
-      if (state.topics.includes(t)) { toast(`「${t}」はフォロー済みです`); return; }
-      state.topics.push(t);
-      // Gemini版と同じく、追加した話題のサンプル記事を1件作る
-      const a = { id: `custom-${Date.now()}`, category: t, source: 'サンプル', createdAt: Date.now(),
-        title: `『${t}』の話題（サンプル記事）`,
-        summary: `「${t}」をフォローしたときに表示されるサンプルです。実際の記事取得はまだ実装されていません。`,
-        imageUrl: '' };
-      state.extraArticles.unshift(a);
-      feed.unshift(a.id);
-      persist(); render(); renderTopics();
-      toast(`「${t}」をフォローしました`, '取り消す', () => removeTopic(t, true));
+      const list = followed();
+      if (list.includes(t)) { toast(`「${t}」はフォロー済みです`); return; }
+      setTopics([...list, t]);
+      const collected = data.topics.some(x => x.name === t);
+      toast(collected ? `「${t}」をフォローしました` : `「${t}」をフォロー（タイトルに含む記事を表示）`, '取り消す', () => setTopics(followed().filter(x => x !== t)));
     }
 
-    function removeTopic(t, silent = false) {
-      const extras = state.extraArticles.filter(a => a.category === t);
-      state.topics = state.topics.filter(x => x !== t);
-      persist(); render(); renderTopics();
-      if (!silent) {
-        toast(`「${t}」のフォローを解除しました`, '元に戻す', () => {
-          if (!state.topics.includes(t)) state.topics.push(t);
-          extras.forEach(a => { if (!feed.includes(a.id)) feed.unshift(a.id); });
-          persist(); render(); renderTopics();
-        });
-      }
+    function removeTopic(t) {
+      const before = followed();
+      setTopics(before.filter(x => x !== t));
+      toast(`「${t}」のフォローを解除しました`, '元に戻す', () => setTopics(before));
     }
 
     function renderTopics() {
-      $('#topic-count').textContent = `${state.topics.length}件`;
-      $('#topic-tags').innerHTML = state.topics.map(t =>
+      const list = followed();
+      $('#topic-count').textContent = `${list.length}件`;
+      $('#topic-tags').innerHTML = list.map(t =>
         `<span class="tag-pill">${esc(t)}<button data-remove="${esc(t)}" aria-label="${esc(t)}のフォローを解除">${icon('x', 'sm')}</button></span>`).join('')
         || '<span class="muted">まだありません</span>';
-      $('#presets').innerHTML = PRESETS.map(p =>
-        `<button class="preset" data-preset="${esc(p)}" ${state.topics.includes(p) ? 'disabled' : ''}>${state.topics.includes(p) ? '✓' : '+'} ${esc(p)}</button>`).join('');
+      const collected = data.topics.map(t => t.name);
+      $('#presets').innerHTML = collected.length
+        ? collected.map(p => `<button class="preset" data-preset="${esc(p)}" ${list.includes(p) ? 'disabled' : ''}>${list.includes(p) ? '✓' : '+'} ${esc(p)}</button>`).join('')
+        : '<span class="muted">記事の読み込み後に表示されます</span>';
     }
 
     /* =========================================================
        オートコンプリート
        ========================================================= */
-    // カタカナ→ひらがな、全角→半角、大文字→小文字にそろえて比較する
-    const toHira = (s) => s.replace(/[ァ-ヶ]/g, c => String.fromCharCode(c.charCodeAt(0) - 0x60));
-    const norm = (s) => toHira(s.normalize('NFKC').toLowerCase());
-
     function attachAutocomplete(input, listEl, onPick) {
       let items = [];
       let index = -1;
@@ -685,13 +750,14 @@
         const q = input.value.trim();
         if (!q) { hide(); return; }
         const nq = norm(q);
-        const candidates = [...new Set([...TOPIC_DICTIONARY, ...allArticles().map(a => a.category)])];
+        const collected = data.topics.map(t => t.name);
+        const candidates = [...new Set([...collected, ...TOPIC_DICTIONARY])];
         const matched = candidates
           .map(t => ({ t, i: norm(t).indexOf(nq) }))
           .filter(x => x.i >= 0)
           .sort((a, b) => (a.i === 0 ? 0 : 1) - (b.i === 0 ? 0 : 1) || a.t.length - b.t.length)
           .slice(0, 6)
-          .map(x => ({ value: x.t, followed: state.topics.includes(x.t) }));
+          .map(x => ({ value: x.t, followed: followed().includes(x.t), collected: collected.includes(x.t) }));
         if (!matched.some(m => norm(m.value) === nq)) matched.push({ value: q, isNew: true });
         items = matched;
         index = -1;
@@ -699,7 +765,7 @@
           <li class="ac-item" role="option" data-i="${i}">
             ${icon(it.isNew ? 'plus' : 'tag', 'sm')}
             <span>${it.isNew ? `「${esc(it.value)}」を新しくフォロー` : highlight(it.value, q)}</span>
-            ${it.followed ? '<span class="tag">フォロー中</span>' : ''}
+            ${it.followed ? '<span class="tag">フォロー中</span>' : it.collected ? '<span class="tag">収集中</span>' : ''}
           </li>`).join('');
         listEl.hidden = false;
       }
@@ -811,9 +877,10 @@
     }
 
     function renderSavedList() {
-      const saved = state.savedIds.map(findArticle).filter(Boolean);
+      const saved = Object.values(state.savedItems).reverse();
       $('#saved-list').innerHTML = saved.length
-        ? saved.map(a => `<div class="saved-item"><span>${esc(a.title)}</span>
+        ? saved.map(a => `<div class="saved-item">
+            <a href="${esc(a.url)}" target="_blank" rel="noopener">${esc(a.title)}<small>${esc(a.source)}</small></a>
             <button class="icon-btn" data-unsave="${esc(a.id)}" aria-label="保存を解除">${icon('trash', 'sm')}</button></div>`).join('')
         : '<p class="muted" style="padding:16px 0">保存した記事はまだありません。カードを右にスワイプすると保存できます。</p>';
     }
@@ -821,15 +888,17 @@
     function openActions(id) {
       const a = findArticle(id);
       if (!a) return;
-      const saved = state.savedIds.includes(id);
-      const following = state.topics.includes(a.category);
+      const saved = !!state.savedItems[id];
+      const topic = matchedTopics(a)[0];
       $('#actions-title').textContent = a.title;
       $('#actions-list').innerHTML = `
+        <button data-do="open">${icon('external')}記事を開く</button>
         <button data-do="save">${icon('bookmark', saved ? 'fill' : '')}${saved ? '保存を解除' : 'あとで読むに保存'}</button>
         <button data-do="share">${icon('share')}共有</button>
-        <button data-do="follow">${icon(following ? 'check' : 'plus')}「${esc(a.category)}」を${following ? 'フォロー解除' : 'フォロー'}</button>
+        ${topic ? `<button data-do="unfollow">${icon('check')}「${esc(topic)}」のフォローを解除</button>` : ''}
         <button data-do="dismiss" class="danger">${icon('ban')}興味なし</button>`;
       $('#actions-list').dataset.id = id;
+      $('#actions-list').dataset.topic = topic || '';
       openSheet('sheet-actions');
     }
 
@@ -839,6 +908,7 @@
     let swipe = null;
     let longPressTimer = null;
     let suppressClickUntil = 0;
+    const threshold = (card) => Math.min(110, card.offsetWidth * 0.3);
 
     function setupSwipe() {
       const feedEl = $('#feed');
@@ -907,7 +977,7 @@
       window.addEventListener('pointerup', end);
       window.addEventListener('pointercancel', end);
 
-      // ボタンやタイトルのタップ
+      // ボタンや記事リンクのタップ（スワイプ・長押し直後のタップは無視）
       feedEl.addEventListener('click', (e) => {
         if (Date.now() < suppressClickUntil) { e.preventDefault(); e.stopPropagation(); return; }
         const el = e.target.closest('[data-act]');
@@ -915,8 +985,9 @@
         const id = el.closest('.swipe').dataset.id;
         ({ like: toggleLike, save: toggleSave, share: shareArticle, more: openActions, open: openArticle })[el.dataset.act]?.(id);
       });
+      // iPhoneでリンク長押しのプレビューを出さない
+      feedEl.addEventListener('contextmenu', (e) => { if (e.target.closest('.card')) e.preventDefault(); });
     }
-    const threshold = (card) => Math.min(110, card.offsetWidth * 0.3);
 
     /* =========================================================
        プルトゥリフレッシュ（引っぱって更新）
@@ -983,7 +1054,7 @@
 
     function updatePlayLabel() {
       const v = state.playfulness;
-      $('#play-val').textContent = v < 30 ? `${v}%（堅実）` : v > 70 ? `${v}%（冒険）` : `${v}%`;
+      $('#play-val').textContent = v < 15 ? `${v}%（堅実）` : v > 50 ? `${v}%（冒険）` : `${v}%`;
     }
 
     function setupEvents() {
@@ -1006,12 +1077,12 @@
         if (!c) return;
         activeChip = c.dataset.chip;
         render();
-        c.scrollIntoView?.({ inline: 'nearest', block: 'nearest' });
+        window.scrollTo({ top: 0 });
       });
 
       const slider = $('#play-slider');
       slider.addEventListener('input', () => { state.playfulness = Number(slider.value); updatePlayLabel(); });
-      slider.addEventListener('change', () => { persist(); buildFeed(); render(); toast(`遊び度を ${state.playfulness}% にしました`); });
+      slider.addEventListener('change', () => { persist(); buildFeed(); render(); toast(`意外な記事の割合を ${state.playfulness}% にしました`); });
 
       $('#topic-tags').addEventListener('click', (e) => {
         const b = e.target.closest('[data-remove]');
@@ -1028,49 +1099,47 @@
       $('#actions-list').addEventListener('click', (e) => {
         const b = e.target.closest('[data-do]');
         if (!b) return;
-        const id = $('#actions-list').dataset.id;
+        const { id, topic } = $('#actions-list').dataset;
         const a = findArticle(id);
         closeSheet();
+        if (b.dataset.do === 'open' && a) { openArticle(id); window.open(a.url, '_blank', 'noopener'); }
         if (b.dataset.do === 'save') toggleSave(id);
         if (b.dataset.do === 'share') shareArticle(id);
-        if (b.dataset.do === 'follow') state.topics.includes(a.category) ? removeTopic(a.category) : addTopic(a.category);
+        if (b.dataset.do === 'unfollow' && topic) removeTopic(topic);
         if (b.dataset.do === 'dismiss') {
           const wrap = document.querySelector(`.swipe[data-id="${CSS.escape(id)}"]`);
           wrap ? animateDismiss(wrap, id) : dismiss(id);
         }
       });
       $('#reset-btn').addEventListener('click', () => {
-        const theme = state.theme;
-        state = { ...loadStateDefaults(), theme };
-        persist(); closeSheet(); applyTheme(); renderTopics(); updatePlayLabel();
+        const keep = { theme: state.theme, savedItems: state.savedItems, hintSeen: true };
+        state = { ...defaults(), ...keep };
+        persist(); closeSheet(); applyTheme(); updatePlayLabel();
         $('#play-slider').value = state.playfulness;
-        refresh(false).then(() => toast('初期設定に戻しました'));
+        buildFeed(); render(); renderTopics();
+        toast('学習内容と設定を初期化しました（保存した記事は残しています）');
       });
 
       attachAutocomplete($('#quick-input'), $('#quick-ac'), addTopic);
       attachAutocomplete($('#topic-input'), $('#topic-ac'), addTopic);
     }
 
-    function loadStateDefaults() {
-      return { topics: [...DEFAULT_TOPICS], playfulness: 50, savedIds: [], likedIds: [],
-        dismissedIds: [], extraArticles: [], theme: 'dark', hintSeen: true };
-    }
-
     /* =========================================================
        起動
        ========================================================= */
-    function init() {
+    async function init() {
       hydrateIcons();
       applyTheme();
       $('#play-slider').value = state.playfulness;
       updatePlayLabel();
-      renderTopics();
       $('#hint').hidden = state.hintSeen;
       setupEvents();
       setupSheetDrag();
       setupSwipe();
       setupPullToRefresh();
-      refresh(false);
+      renderTopics();
+      await refresh(false);
+      renderTopics();
     }
     window.addEventListener('DOMContentLoaded', init);
   </script>
