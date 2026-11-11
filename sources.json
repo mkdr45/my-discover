@@ -1,5 +1,5 @@
 {
-  "_説明": "記事の収集設定です。topics に話題を足すと、その話題の記事も30分ごとに集めます。keywords は検索に使う言葉（最初の言葉ではてブを検索し、全部の言葉でGoogleニュースを検索）。 youtube にチャンネルを足すと、そのチャンネルの新着動画・配信も集めます（channelId はチャンネルのID）。",
+  "_説明": "記事の収集設定です。topics に話題を足すと、その話題の記事も30分ごとに集めます。keywords は検索に使う言葉（最初の言葉ではてブを検索し、全部の言葉でGoogleニュースを検索）。 youtube にチャンネルを足すと、そのチャンネルの新着動画・配信も集めます（channelId はチャンネルのID）。 アプリでフォローした話題は topics.json に自動で書き込まれ、同じように集められます。",
   "topics": [
     {
       "name": "ホロライブ",
@@ -114,6 +114,7 @@
   ],
   "maxAgeDays": 3,
   "youtubeMaxAgeDays": 7,
-  "perTopicMax": 25,
-  "discoverMax": 80
+  "perTopicMax": 40,
+  "discoverMax": 80,
+  "topicMaxAgeDays": 7
 }

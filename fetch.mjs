@@ -49,7 +49,11 @@ export function parseFeed(xml) {
       const img = content.match(/<img[^>]+src=["']([^"']+)["']/i);
       if (img && !/favicon|append\.gif|entry\/image/.test(img[1])) image = img[1];
     }
-    const source = tagText(b, 'source');
+    const source = tagText(b, 'source') || tagText(b, 'News:Source');
+    // Bingニュースの転送リンクから、元の記事URLを取り出す
+    if (/bing\.com\/news\/apiclick/i.test(link)) {
+      try { link = new URL(link.replace(/&amp;/g, '&')).searchParams.get('url') || link; } catch { /* そのまま使う */ }
+    }
     const bookmarks = Number(tagText(b, 'hatena:bookmarkcount')) || 0;
     return { title, link: link.trim(), date, image, source, bookmarks };
   }).filter((i) => i.title && /^https?:\/\//.test(i.link));
@@ -129,18 +133,37 @@ export async function main() {
   const minTime = Date.now() - (cfg.maxAgeDays || 3) * 86400000;
   const all = [];
 
-  console.log('■ 話題ごとの収集');
-  for (const t of cfg.topics) {
-    const kw = t.keywords?.length ? t.keywords : [t.name];
-    const hatena = await getFeed(`https://b.hatena.ne.jp/q/${encodeURIComponent(kw[0])}?mode=rss&sort=recent`, `はてブ検索「${kw[0]}」`);
-    const q = kw.map((k) => (k.includes(' ') ? `"${k}"` : k)).join(' OR ') + ` when:${cfg.maxAgeDays || 3}d`;
-    const google = await getFeed(`https://news.google.com/rss/search?q=${encodeURIComponent(q)}&hl=ja&gl=JP&ceid=JP:ja`, `Googleニュース「${t.name}」`);
-    const items = [
-      ...hatena.map((i) => toArticle(i, { topics: [t.name], via: 'hatena', feed: 'はてブ検索' })),
-      ...google.map((i) => toArticle(i, { topics: [t.name], via: 'google', feed: 'Googleニュース' }))
-    ];
-    all.push(...items.slice(0, (cfg.perTopicMax || 25) * 2));
+  // アプリでフォローした話題（topics.json）を、収集する話題に加える
+  let userTopics = [];
+  try { userTopics = JSON.parse(await fs.readFile(new URL('./topics.json', import.meta.url), 'utf8')).topics || []; } catch { /* まだ無い */ }
+  for (const raw of userTopics.slice(0, 40)) {
+    const name = String(raw).trim().slice(0, 40);
+    if (name && !cfg.topics.some((t) => t.name === name)) cfg.topics.push({ name, keywords: [name] });
   }
+  // フォローした話題そのものが除外キーワードに当たる場合は、その除外を外す
+  const followedWords = cfg.topics.flatMap((t) => [t.name, ...(t.keywords || [])]).map((w) => w.toLowerCase());
+  for (let i = exclude.length - 1; i >= 0; i--) if (followedWords.includes(exclude[i])) exclude.splice(i, 1);
+
+  const topicDays = cfg.topicMaxAgeDays || 7;
+  const topicMinTime = Date.now() - topicDays * 86400000;
+  const dateBegin = new Date(topicMinTime).toISOString().slice(0, 10);
+  const enc = encodeURIComponent;
+
+  console.log(`■ 話題ごとの収集（${cfg.topics.length}件）`);
+  await mapLimit(cfg.topics, 4, async (t) => {
+    const kw = t.keywords?.length ? t.keywords : [t.name];
+    const add = (items, via, feed) => all.push(...items.map((i) => toArticle(i, { topics: [t.name], via, feed })));
+    // はてなブックマーク：キーワードごとの新着（最大3語）＋ 期間内の人気
+    for (const k of kw.slice(0, 3)) {
+      add(await getFeed(`https://b.hatena.ne.jp/q/${enc(k)}?mode=rss&sort=recent&users=1`, `はてブ新着「${k}」`), 'hatena', 'はてブ検索');
+    }
+    add(await getFeed(`https://b.hatena.ne.jp/q/${enc(kw[0])}?mode=rss&sort=popular&date_begin=${dateBegin}`, `はてブ人気「${kw[0]}」`), 'hatena', 'はてブ検索');
+    // Googleニュース：全キーワードをまとめて検索
+    const q = kw.map((k) => (k.includes(' ') ? `"${k}"` : k)).join(' OR ') + ` when:${topicDays}d`;
+    add(await getFeed(`https://news.google.com/rss/search?q=${enc(q)}&hl=ja&gl=JP&ceid=JP:ja`, `Googleニュース「${t.name}」`), 'google', 'Googleニュース');
+    // Bingニュース：元記事のURLが分かるのでサムネイルも探せる
+    add(await getFeed(`https://www.bing.com/news/search?q=${enc(kw[0])}&format=rss&mkt=ja-JP&setlang=ja`, `Bingニュース「${kw[0]}」`), 'bing', 'Bingニュース');
+  });
 
   console.log('■ YouTubeチャンネルの収集');
   for (const ch of cfg.youtube || []) {
@@ -167,7 +190,8 @@ export async function main() {
   let list = all.filter((a) => {
     const text = (a.title + ' ' + a.source).toLowerCase();
     if (exclude.some((w) => text.includes(w))) return false;
-    const limit = a.via === 'youtube' ? Date.now() - (cfg.youtubeMaxAgeDays || 7) * 86400000 : minTime; // 動画は7日分
+    const limit = a.via === 'youtube' ? Date.now() - (cfg.youtubeMaxAgeDays || 7) * 86400000 // 動画は7日分
+      : a.topics.length ? topicMinTime : minTime;                                           // 話題の記事は7日分、発見用は3日分
     if (a.published && Date.parse(a.published) < limit) return false;
     const nt = normTitle(a.title);
     if (seenUrl.has(a.url) || seenTitle.has(nt)) return false;
@@ -185,15 +209,15 @@ export async function main() {
     if (a.topics.length) {
       const key = a.topics[0];
       count[key] = (count[key] || 0) + 1;
-      return count[key] <= (cfg.perTopicMax || 25);
+      return count[key] <= (cfg.perTopicMax || 40);
     }
     return ++discoverCount <= (cfg.discoverMax || 80);
   });
 
   // 画像がない記事の og:image を探す（Googleニュースの転送リンクは除く）
-  const noImage = list.filter((a) => !a.image && a.via !== 'google').slice(0, 60);
+  const noImage = list.filter((a) => !a.image && a.via !== 'google').slice(0, 120);
   console.log(`■ サムネイル探索: ${noImage.length}件`);
-  await mapLimit(noImage, 6, async (a) => { a.image = await findOgImage(a.url); });
+  await mapLimit(noImage, 8, async (a) => { a.image = await findOgImage(a.url); });
 
   const out = {
     updatedAt: new Date().toISOString(),

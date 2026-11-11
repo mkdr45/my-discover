@@ -250,6 +250,8 @@
     .saved-item a { flex: 1; min-width: 0; color: var(--text); text-decoration: none; line-height: 1.4; }
     .saved-item small { display: block; color: var(--muted); font-size: 11px; margin-top: 2px; }
     .muted { color: var(--muted); font-size: 12px; }
+    .sync-status.on { color: var(--ok); }
+    .btn:disabled { opacity: .5; }
 
     /* ===== トースト ===== */
     .toast { position: fixed; left: 16px; right: 16px; bottom: calc(16px + env(safe-area-inset-bottom)); z-index: 60;
@@ -341,8 +343,19 @@
       </div>
       <div class="section">
         <h3><span>自動収集している話題</span></h3>
-        <p class="muted" style="margin:0 0 8px">ここにない話題をフォローすると、集めた記事のうちタイトルに含むものを表示します。</p>
         <div class="tags" id="presets"></div>
+      </div>
+      <div class="section">
+        <h3><span>新しい話題の自動収集</span><span id="sync-status" class="sync-status">未設定</span></h3>
+        <p class="muted" id="sync-help" style="margin:0 0 8px"></p>
+        <div id="sync-form">
+          <div class="field">
+            <i data-icon="plus"></i>
+            <input type="password" id="token-input" placeholder="GitHubトークンを貼り付け" autocomplete="off" autocapitalize="off" spellcheck="false">
+          </div>
+          <button class="btn" id="token-save" style="margin-top:8px">保存して有効にする</button>
+        </div>
+        <button class="btn ghost" id="sync-clear" hidden>トークンを削除</button>
       </div>
       <div class="section">
         <button class="btn ghost" id="reset-btn">学習内容と設定を初期化</button>
@@ -739,6 +752,128 @@
       state.topics = list;
       persist();
       buildFeed(); render(); renderTopics();
+      scheduleSync();
+    }
+
+    /* =========================================================
+       フォローした話題をGitHubに伝える（新しい話題の自動収集）
+       アプリが topics.json を書き換える → GitHubが1〜2分で記事を集め直す
+       ========================================================= */
+    const GH = (() => {
+      const m = location.hostname.match(/^([^.]+)\.github\.io$/);
+      const repo = location.pathname.split('/').filter(Boolean)[0];
+      return { owner: m ? m[1] : 'mkdr45', repo: (m && repo && !repo.includes('.')) ? repo : 'my-discover' };
+    })();
+    const TOKEN_KEY = 'discover_github_token';
+    const getToken = () => { try { return localStorage.getItem(TOKEN_KEY) || ''; } catch (e) { return ''; } };
+    const b64encode = (str) => { let bin = ''; new TextEncoder().encode(str).forEach(b => { bin += String.fromCharCode(b); }); return btoa(bin); };
+    const b64decode = (b64) => new TextDecoder().decode(Uint8Array.from(atob(b64.replace(/\s/g, '')), c => c.charCodeAt(0)));
+
+    function ghApi(path, options = {}) {
+      return fetch(`https://api.github.com/repos/${GH.owner}/${GH.repo}${path}`, {
+        ...options,
+        cache: 'no-store',
+        headers: { Authorization: `Bearer ${getToken()}`, Accept: 'application/vnd.github+json', 'X-GitHub-Api-Version': '2022-11-28' }
+      });
+    }
+
+    // 戻り値: 'notoken'（未設定）/ 'same'（変更なし）/ 'ok'（書き込み成功）。失敗時は例外
+    async function syncTopics(retry = true) {
+      if (!getToken()) return 'notoken';
+      const names = followed().slice(0, 40);
+      let sha;
+      const cur = await ghApi('/contents/topics.json');
+      if (cur.status === 200) {
+        const j = await cur.json();
+        sha = j.sha;
+        try { if (JSON.stringify(JSON.parse(b64decode(j.content)).topics) === JSON.stringify(names)) return 'same'; } catch (e) { /* 壊れていたら上書き */ }
+      } else if (cur.status !== 404) {
+        throw new Error(String(cur.status));
+      }
+      const res = await ghApi('/contents/topics.json', {
+        method: 'PUT',
+        body: JSON.stringify({
+          message: `フォロー中の話題を更新（${names.length}件）`,
+          content: b64encode(JSON.stringify({ topics: names }, null, 2) + '\n'),
+          sha
+        })
+      });
+      if (res.status === 409 && retry) return syncTopics(false); // 同時に書き換わった場合は1回だけやり直す
+      if (!res.ok) throw new Error(String(res.status));
+      return 'ok';
+    }
+
+    function syncErrorMessage(e) {
+      const code = e?.message;
+      if (code === '401') return 'トークンが無効か、期限切れです。チューニングから設定し直してください';
+      if (code === '403' || code === '404') return 'トークンに書き込み権限がありません（Contents を Read and write に）';
+      return '話題をGitHubに送れませんでした。通信状態を確認してください';
+    }
+
+    let syncTimer, pollTimer;
+    function scheduleSync() {
+      if (!getToken()) return;
+      clearTimeout(syncTimer);
+      syncTimer = setTimeout(async () => {
+        try {
+          const result = await syncTopics();
+          if (result === 'ok') watchForNewTopics();
+        } catch (e) { toast(syncErrorMessage(e)); }
+      }, 1500);
+    }
+
+    // 収集が終わるまで20秒ごとに確認し、新しい話題の記事が届いたら自動で読み込む
+    function watchForNewTopics() {
+      clearInterval(pollTimer);
+      const waiting = () => followed().filter(t => !data.topics.some(x => x.name === t));
+      if (!waiting().length) return;
+      let tries = 0;
+      pollTimer = setInterval(async () => {
+        if (++tries > 15 || !waiting().length) { clearInterval(pollTimer); return; }
+        if (loading) return;
+        try {
+          const json = await loadArticles();
+          const arrived = waiting().filter(t => json.topics.some(x => x.name === t));
+          if (!arrived.length) return;
+          data = json;
+          state.seenIds = json.articles.map(a => a.id);
+          persist(); buildFeed(); render(); renderTopics();
+          const n = json.articles.filter(a => arrived.some(t => (a.topics || []).includes(t))).length;
+          toast(`「${arrived.join('」「')}」の記事が届きました（${n}件）`);
+        } catch (e) { /* 次の回でやり直す */ }
+      }, 20000);
+    }
+
+    function renderSync() {
+      const on = !!getToken();
+      $('#sync-status').textContent = on ? '✓ 設定済み' : '未設定';
+      $('#sync-status').classList.toggle('on', on);
+      $('#sync-form').hidden = on;
+      $('#sync-clear').hidden = !on;
+      $('#sync-help').textContent = on
+        ? '新しい話題をフォローすると、1〜2分で記事が届きます。'
+        : 'GitHubのトークン（合言葉）を1度入れると、新しくフォローした話題の記事も自動で集めます。トークンはこの端末の中にだけ保存されます。';
+    }
+
+    async function saveToken() {
+      const input = $('#token-input');
+      const value = input.value.trim();
+      if (!value) { toast('トークンを貼り付けてください'); return; }
+      try { localStorage.setItem(TOKEN_KEY, value); } catch (e) { toast('この端末では保存できませんでした'); return; }
+      $('#token-save').disabled = true;
+      try {
+        const result = await syncTopics();
+        input.value = '';
+        renderSync();
+        toast(result === 'ok' ? '設定できました。フォロー中の話題を送信しました' : '設定できました');
+        if (result === 'ok') watchForNewTopics();
+      } catch (e) {
+        try { localStorage.removeItem(TOKEN_KEY); } catch (err) {}
+        renderSync();
+        toast(syncErrorMessage(e));
+      } finally {
+        $('#token-save').disabled = false;
+      }
     }
 
     function addTopic(name) {
@@ -748,7 +883,10 @@
       if (list.includes(t)) { toast(`「${t}」はフォロー済みです`); return; }
       setTopics([...list, t]);
       const collected = data.topics.some(x => x.name === t);
-      toast(collected ? `「${t}」をフォローしました` : `「${t}」をフォロー（タイトルに含む記事を表示）`, '取り消す', () => setTopics(followed().filter(x => x !== t)));
+      const undo = () => setTopics(followed().filter(x => x !== t));
+      if (collected) toast(`「${t}」をフォローしました`, '取り消す', undo);
+      else if (getToken()) toast(`「${t}」をフォロー。記事を集めています（1〜2分）`, '取り消す', undo);
+      else toast(`「${t}」をフォロー。自動収集は未設定です`, '設定する', () => openSheet('sheet-settings'));
     }
 
     function removeTopic(t) {
@@ -1158,6 +1296,13 @@
         toast('学習内容と設定を初期化しました（保存した記事は残しています）');
       });
 
+      $('#token-save').addEventListener('click', saveToken);
+      $('#sync-clear').addEventListener('click', () => {
+        try { localStorage.removeItem(TOKEN_KEY); } catch (e) {}
+        renderSync();
+        toast('トークンを削除しました');
+      });
+
       attachAutocomplete($('#quick-input'), $('#quick-ac'), addTopic);
       attachAutocomplete($('#topic-input'), $('#topic-ac'), addTopic);
     }
@@ -1176,8 +1321,10 @@
       setupSwipe();
       setupPullToRefresh();
       renderTopics();
+      renderSync();
       await refresh(false);
       renderTopics();
+      watchForNewTopics();
     }
     window.addEventListener('DOMContentLoaded', init);
   </script>
