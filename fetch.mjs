@@ -72,7 +72,9 @@ async function get(url, timeoutMs = 12000) {
 
 async function getFeed(url, label) {
   try {
-    const items = parseFeed(await get(url));
+    let xml;
+    try { xml = await get(url); } catch (e) { await new Promise((r) => setTimeout(r, 2000)); xml = await get(url); } // 失敗したら1回だけやり直す
+    const items = parseFeed(xml);
     console.log(`  ✓ ${label}: ${items.length}件`);
     return items;
   } catch (e) {
