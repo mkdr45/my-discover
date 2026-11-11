@@ -165,7 +165,21 @@
     /* ===== B案：リスト表示 ===== */
     .feed { gap: 0; }
     .swipe { border-radius: 0; border-bottom: 1px solid var(--line); }
-    .swipe-bg { border-radius: 0; }
+    .swipe-actions { position: absolute; top: 0; right: 0; bottom: 0; width: 150px; display: flex; }
+    .swipe-actions .act { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px;
+      font-size: 11px; font-weight: 700; color: #fff; }
+    .swipe-actions .save { background: var(--accent); color: var(--on-accent); }
+    .swipe-actions .dismiss { background: var(--danger); color: #fff; }
+    #feed { transition: transform .25s ease; }
+    #feed.paging { transition: none; }
+    main, .hbar { touch-action: pan-y; }
+    main { overflow-x: clip; }
+    .page-hint { position: fixed; top: 50%; z-index: 25; padding: 9px 16px; border-radius: 20px; pointer-events: none;
+      background: var(--card-2); color: var(--muted); font-size: 14px; font-weight: 700; box-shadow: var(--shadow);
+      transform: translateY(-50%); opacity: 0; transition: background .15s, color .15s; white-space: nowrap; }
+    .page-hint.left { left: 12px; }
+    .page-hint.right { right: 12px; }
+    .page-hint.ready { background: var(--accent); color: var(--on-accent); }
     .card { border: 0; border-radius: 0; background: var(--bg); }
     .card .src { display: flex; align-items: center; gap: 6px; font-size: 11px; color: var(--muted); min-width: 0; white-space: nowrap; overflow: hidden; }
     .fav { width: 16px; height: 16px; flex: none; border-radius: 4px; background: var(--fav-bg); color: var(--accent);
@@ -301,7 +315,7 @@
     <!-- 操作ヒント（初回のみ） -->
     <div class="hint" id="hint" hidden>
       <i data-icon="sparkles" class="sm"></i>
-      <span>記事を ← で「興味なし」、→ で「保存」。長押しか「…」でメニュー</span>
+      <span>記事を ← に少しずらすと「保存」「興味なし」。横に大きく払うと話題を切り替え。長押しでメニュー</span>
       <button class="icon-btn" id="hint-close" aria-label="ヒントを閉じる"><i data-icon="x" class="sm"></i></button>
     </div>
 
@@ -314,6 +328,9 @@
       <button class="btn" id="empty-settings">チューニングを開く</button>
     </div>
   </main>
+
+  <!-- 話題切り替えの案内 -->
+  <div id="page-hint" class="page-hint" aria-hidden="true"></div>
 
   <!-- ボトムシート共通の背景 -->
   <div id="backdrop" class="backdrop"></div>
@@ -595,9 +612,9 @@
         : `<article class="card row"><div class="txt">${src}<h3>${link(esc(a.title))}</h3>${sub}</div>${thumb}</article>`;
       return `
         <div class="swipe" data-id="${esc(a.id)}">
-          <div class="swipe-bg">
-            <div class="bg-save">${icon('bookmark')}${saved ? '保存解除' : '保存'}</div>
-            <div class="bg-dismiss">興味なし${icon('ban')}</div>
+          <div class="swipe-actions">
+            <button class="act save" data-act="save">${icon('bookmark', saved ? 'fill' : '')}<span>${saved ? '保存解除' : '保存'}</span></button>
+            <button class="act dismiss" data-act="dismiss">${icon('ban')}<span>興味なし</span></button>
           </div>
           ${body}
         </div>`;
@@ -607,6 +624,7 @@
       const list = visibleArticles();
       $('#feed-stat').textContent = `${list.length}件`;
       $('#empty').hidden = list.length > 0;
+      openCard = null;
       $('#feed').innerHTML = list.map(cardHTML).join('');
       renderChips();
       renderSavedBadge();
@@ -1078,86 +1096,184 @@
     }
 
     /* =========================================================
-       スワイプ操作 & 長押し（カード）
+       スワイプ操作
+       ・記事を ← に少しずらす → 「保存」「興味なし」ボタンが出る
+       ・横に大きく払う       → 隣の話題に切り替え（← で次、→ で前）
+       ・長押し              → メニュー
        ========================================================= */
-    let swipe = null;
+    const ACT_W = 150;          // ボタン2つ分の幅
+    let g = null;               // 操作中のジェスチャー
+    let openCard = null;        // ボタンを出している記事
+    let pageX = 0;              // 話題切り替え中のフィードのずれ
     let longPressTimer = null;
     let suppressClickUntil = 0;
-    const threshold = (card) => Math.min(110, card.offsetWidth * 0.3);
+
+    const chipList = () => ['ALL', ...followed(), 'REC'];
+    const chipLabel = (v) => v === 'ALL' ? 'すべて' : v === 'REC' ? '🎲 発見' : v;
+    function neighbor(dir) {
+      const list = chipList(), j = list.indexOf(activeChip) + dir;
+      return j >= 0 && j < list.length ? list[j] : null;
+    }
+
+    function setCardX(card, x, animate) {
+      card.classList.toggle('dragging', !animate);
+      card.style.transform = x ? `translateX(${x}px)` : '';
+    }
+    function closeOpenCard(animate = true) {
+      if (!openCard) return;
+      setCardX(openCard, 0, animate);
+      openCard = null;
+    }
+    function openCardEl(card) {
+      if (openCard && openCard !== card) closeOpenCard();
+      setCardX(card, -ACT_W, true);
+      openCard = card;
+    }
+
+    function setPage(x, animate) {
+      pageX = x;
+      const f = $('#feed'), hint = $('#page-hint');
+      f.classList.toggle('paging', !animate);
+      f.style.transform = x ? `translateX(${x}px)` : '';
+      const target = x ? neighbor(x < 0 ? 1 : -1) : null;
+      if (!target || Math.abs(x) < 16) { hint.style.opacity = '0'; return; }
+      const ready = Math.abs(x) > window.innerWidth * 0.22;
+      hint.textContent = x < 0 ? `${chipLabel(target)} ›` : `‹ ${chipLabel(target)}`;
+      hint.className = `page-hint ${x < 0 ? 'right' : 'left'} ${ready ? 'ready' : ''}`;
+      hint.style.opacity = String(Math.min(1, Math.abs(x) / 70));
+    }
+    function dragPage(over) {
+      const target = neighbor(over < 0 ? 1 : -1);
+      setPage(target ? over * 0.9 : over * 0.25, false); // 端の話題では少しだけ動く
+    }
+
+    async function switchTopic(dir) {
+      const target = neighbor(dir);
+      if (!target) { setPage(0, true); return; }
+      const f = $('#feed'), w = window.innerWidth;
+      closeOpenCard(false);
+      $('#page-hint').style.opacity = '0';
+      f.classList.remove('paging');
+      f.style.transition = 'transform .16s ease-in';
+      f.style.transform = `translateX(${-dir * w}px)`;
+      await sleep(160);
+      activeChip = target;
+      render();
+      window.scrollTo({ top: 0 });
+      f.style.transition = 'none';
+      f.style.transform = `translateX(${dir * w * 0.3}px)`;
+      void f.offsetWidth;
+      f.style.transition = 'transform .22s ease-out';
+      f.style.transform = '';
+      pageX = 0;
+      setTimeout(() => { f.style.transition = ''; }, 240);
+      $('#chips .chip.active')?.scrollIntoView({ inline: 'center', block: 'nearest', behavior: 'smooth' });
+    }
 
     function setupSwipe() {
       const feedEl = $('#feed');
 
-      feedEl.addEventListener('pointerdown', (e) => {
-        const card = e.target.closest('.card');
-        if (!card || e.button > 0 || loading) return;
-        const wrap = card.parentElement;
-        swipe = { card, wrap, id: wrap.dataset.id, x0: e.clientX, y0: e.clientY, dx: 0, mode: null, pid: e.pointerId, armed: false };
-        clearTimeout(longPressTimer);
-        longPressTimer = setTimeout(() => {
-          if (swipe && !swipe.mode) {
-            swipe.mode = 'longpress';
-            navigator.vibrate?.(10);
-            openActions(swipe.id);
-          }
-        }, 550);
+      document.addEventListener('pointerdown', (e) => {
+        if (e.button > 0 || currentSheet || loading) return;
+        if (e.target.closest('.chips, input, .sheet, .toast, .ac-list, .backdrop, .swipe-actions')) return;
+        const card = e.target.closest('#feed .card');
+        // ボタンが出ている状態で別の場所に触れたら、まず閉じる
+        if (openCard && card !== openCard) { closeOpenCard(); suppressClickUntil = Date.now() + 350; }
+        const now = performance.now();
+        g = { card, base: card && card === openCard ? -ACT_W : 0, x0: e.clientX, y0: e.clientY,
+              dx: 0, vx: 0, lastX: e.clientX, lastT: now, mode: null, phase: null, pid: e.pointerId };
+        if (card) {
+          clearTimeout(longPressTimer);
+          longPressTimer = setTimeout(() => {
+            if (g && !g.mode && g.card === card) {
+              g.mode = 'longpress';
+              navigator.vibrate?.(10);
+              closeOpenCard();
+              openActions(card.parentElement.dataset.id);
+            }
+          }, 550);
+        }
       });
 
       window.addEventListener('pointermove', (e) => {
-        if (!swipe || e.pointerId !== swipe.pid) return;
-        const dx = e.clientX - swipe.x0, dy = e.clientY - swipe.y0;
-        if (!swipe.mode && (Math.abs(dx) > 8 || Math.abs(dy) > 8)) {
+        if (!g || e.pointerId !== g.pid) return;
+        const dx = e.clientX - g.x0, dy = e.clientY - g.y0, now = performance.now();
+        g.vx = (e.clientX - g.lastX) / Math.max(1, now - g.lastT);
+        g.lastX = e.clientX; g.lastT = now;
+        if (!g.mode && (Math.abs(dx) > 8 || Math.abs(dy) > 8)) {
           clearTimeout(longPressTimer);
           if (Math.abs(dx) > Math.abs(dy) * 1.2) {
-            swipe.mode = 'h';
-            swipe.card.classList.add('dragging');
-            try { swipe.card.setPointerCapture(e.pointerId); } catch (err) {}
+            g.mode = 'h';
+            if (g.card) { try { g.card.setPointerCapture(e.pointerId); } catch (err) {} }
           } else {
-            swipe.mode = 'v';
+            g.mode = 'v';
+            closeOpenCard();
           }
         }
-        if (swipe.mode !== 'h') return;
-        swipe.dx = dx;
-        swipe.card.style.transform = `translateX(${dx}px)`;
-        swipe.wrap.dataset.dir = dx > 0 ? 'right' : 'left';
-        const armed = Math.abs(dx) > threshold(swipe.card);
-        if (armed !== swipe.armed) {
-          swipe.armed = armed;
-          swipe.wrap.classList.toggle('armed', armed);
-          if (armed) navigator.vibrate?.(8);
+        if (g.mode !== 'h') return;
+        g.dx = dx;
+        if (g.card) {
+          // ボタンの幅までは記事が指についてくる。それを超えたら話題の切り替えに移る
+          const x = g.base + dx;
+          if (x <= 0 && x >= -ACT_W) {
+            setCardX(g.card, x, false);
+            if (pageX) setPage(0, false);
+            g.phase = 'card';
+            return;
+          }
+          setCardX(g.card, x > 0 ? 0 : -ACT_W, false);
+          g.phase = 'page';
+          dragPage(x > 0 ? x : x + ACT_W);
+        } else {
+          g.phase = 'page';
+          dragPage(dx);
         }
       });
 
       const end = () => {
         clearTimeout(longPressTimer);
-        if (!swipe) return;
-        const s = swipe;
-        swipe = null;
+        if (!g) return;
+        const s = g;
+        g = null;
         if (s.mode === 'longpress') { suppressClickUntil = Date.now() + 500; return; }
+        if (!s.mode) {
+          // ボタンが出ている記事をタップしたら閉じるだけ（記事は開かない）
+          if (s.card && s.card === openCard) { closeOpenCard(); suppressClickUntil = Date.now() + 350; }
+          return;
+        }
         if (s.mode !== 'h') return;
         suppressClickUntil = Date.now() + 400;
-        s.card.classList.remove('dragging');
-        const w = s.card.offsetWidth;
-        if (s.dx < -threshold(s.card)) {
-          // 左スワイプ：画面外へ飛ばして「興味なし」
-          s.card.style.transform = `translateX(${-w * 1.2}px)`;
-          setTimeout(() => animateDismiss(s.wrap, s.id), 180);
-        } else {
-          s.card.style.transform = '';
-          s.wrap.classList.remove('armed');
-          setTimeout(() => { delete s.wrap.dataset.dir; }, 250);
-          if (s.dx > threshold(s.card)) setTimeout(() => toggleSave(s.id), 200); // 右スワイプ：保存
+        const fast = Math.abs(s.vx) > 0.6;
+
+        if (s.phase === 'page') {
+          const dir = pageX < 0 ? 1 : -1;
+          const go = neighbor(dir) && (Math.abs(pageX) > window.innerWidth * 0.22 || (fast && Math.sign(s.vx) === Math.sign(pageX)));
+          if (go) { if (s.card) setCardX(s.card, 0, true); switchTopic(dir); return; }
+          setPage(0, true);
+          $('#page-hint').style.opacity = '0';
+          if (s.card) { if (s.base + s.dx < 0) openCardEl(s.card); else { setCardX(s.card, 0, true); if (openCard === s.card) openCard = null; } }
+          return;
         }
+        // 記事を少しずらした場合：半分以上か、素早く ← に払ったらボタンを出す
+        const x = s.base + s.dx;
+        if (x < -ACT_W / 2 || (fast && s.vx < 0)) openCardEl(s.card);
+        else { setCardX(s.card, 0, true); if (openCard === s.card) openCard = null; }
       };
       window.addEventListener('pointerup', end);
       window.addEventListener('pointercancel', end);
 
       // ボタンや記事リンクのタップ（スワイプ・長押し直後のタップは無視）
       feedEl.addEventListener('click', (e) => {
-        if (Date.now() < suppressClickUntil) { e.preventDefault(); e.stopPropagation(); return; }
         const el = e.target.closest('[data-act]');
+        const inActions = !!e.target.closest('.swipe-actions');
+        if (!inActions && Date.now() < suppressClickUntil) { e.preventDefault(); e.stopPropagation(); return; }
         if (!el) return;
-        const id = el.closest('.swipe').dataset.id;
+        const wrap = el.closest('.swipe');
+        const id = wrap.dataset.id;
+        if (inActions) {
+          closeOpenCard(el.dataset.act === 'save');
+          if (el.dataset.act === 'dismiss') { animateDismiss(wrap, id); return; }
+        }
         ({ like: toggleLike, save: toggleSave, share: shareArticle, more: openActions, open: openArticle })[el.dataset.act]?.(id);
       });
       // iPhoneでリンク長押しのプレビューを出さない
@@ -1192,7 +1308,7 @@
           if (Math.abs(dx) > Math.abs(dy) || dy < 0) { p = null; return; } // 横移動・上方向は対象外
           p.decided = true;
         }
-        if (swipe && swipe.mode === 'h') { p = null; setPull(0); return; }
+        if (g && g.mode === 'h') { p = null; setPull(0); return; }
         e.preventDefault();
         p.dist = Math.min(120, Math.max(0, dy) * 0.5);
         setPull(p.dist);
@@ -1245,7 +1361,7 @@
       document.querySelectorAll('[data-close]').forEach(b => b.addEventListener('click', closeSheet));
       document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeSheet(); });
 
-      $('#hint-close').addEventListener('click', () => { state.hintSeen = true; persist(); $('#hint').hidden = true; });
+      $('#hint-close').addEventListener('click', () => { state.hintSeen2 = true; persist(); $('#hint').hidden = true; });
 
       $('#chips').addEventListener('click', (e) => {
         const c = e.target.closest('[data-chip]');
@@ -1288,7 +1404,7 @@
         }
       });
       $('#reset-btn').addEventListener('click', () => {
-        const keep = { theme: state.theme, savedItems: state.savedItems, hintSeen: true };
+        const keep = { theme: state.theme, savedItems: state.savedItems, hintSeen: true, hintSeen2: true };
         state = { ...defaults(), ...keep };
         persist(); closeSheet(); applyTheme(); updatePlayLabel();
         $('#play-slider').value = state.playfulness;
@@ -1315,7 +1431,7 @@
       applyTheme();
       $('#play-slider').value = state.playfulness;
       updatePlayLabel();
-      $('#hint').hidden = state.hintSeen;
+      $('#hint').hidden = state.hintSeen2;
       setupEvents();
       setupSheetDrag();
       setupSwipe();
